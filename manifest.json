@@ -1,18 +1,14 @@
-{
-  "name": "Göktürk Nuvio Plugins",
-  "version": "1.0",
-  "scrapers": [
-    {
-      "id": "csnuvio-dizimom",
-      "name": "DiziMom",
-      "description": "DiziMom Türkçe dizi kaynakları",
-      "version": "1.0",
-      "author": "csprofesor",
-      "supportedTypes": ["tv"],
-      "filename": "providers/dizimom.js",
-      "enabled": true,
-      "formats": ["m3u8", "mp4"],
-      "contentLanguage": ["tr"]
-    }
-  ]
-}
+[
+  {
+    "id": "csnuvio-dizimom",
+    "name": "DiziMom",
+    "description": "DiziMom Türkçe dizi kaynakları",
+    "version": "1.0.0",
+    "author": "gs",
+    "supportedTypes": ["tv"],
+    "filename": "providers/dizimom.js",
+    "enabled": true,
+    "formats": ["m3u8", "mp4"],
+    "contentLanguage": ["tr"]
+  }
+]
