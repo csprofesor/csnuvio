@@ -1,0 +1,18 @@
+{
+  "name": "Göktürk Nuvio Plugins",
+  "version": "1.0",
+  "scrapers": [
+    {
+      "id": "csnuvio-test",
+      "name": "CSNuvio Test",
+      "description": "Nuvio plugin runtime test provider",
+      "version": "1.0",
+      "author": "csprofesor",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/test.js",
+      "enabled": true,
+      "formats": ["m3u8"],
+      "contentLanguage": ["en"]
+    }
+  ]
+}
