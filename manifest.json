@@ -3,16 +3,16 @@
   "version": "1.0",
   "scrapers": [
     {
-      "id": "csnuvio-test",
-      "name": "CSNuvio Test",
-      "description": "Nuvio plugin runtime test provider",
+      "id": "csnuvio-dizimom",
+      "name": "DiziMom",
+      "description": "DiziMom Türkçe dizi kaynakları",
       "version": "1.0",
       "author": "csprofesor",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "providers/test.js",
+      "supportedTypes": ["tv"],
+      "filename": "providers/dizimom.js",
       "enabled": true,
-      "formats": ["m3u8"],
-      "contentLanguage": ["en"]
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
     }
   ]
 }
