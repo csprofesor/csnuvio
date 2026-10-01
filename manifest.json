@@ -6,7 +6,27 @@
   "author": "gs",
   "manifestVersion": 1,
   "pluginVersion": 1,
-  "type": "repository",
+  "scrapers": [
+    {
+      "id": "csnuvio-dizimom",
+      "name": "DiziMom",
+      "description": "DiziMom Türkçe dizi kaynakları",
+      "version": "1.0.0",
+      "author": "gs",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/dizimom.js",
+      "enabled": true,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "tr"
+      ]
+    }
+  ],
   "plugins": [
     {
       "id": "csnuvio-dizimom",
