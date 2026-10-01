@@ -1,14 +1,28 @@
-[
-  {
-    "id": "csnuvio-dizimom",
-    "name": "DiziMom",
-    "description": "DiziMom Türkçe dizi kaynakları",
-    "version": "1.0.0",
-    "author": "gs",
-    "supportedTypes": ["tv"],
-    "filename": "providers/dizimom.js",
-    "enabled": true,
-    "formats": ["m3u8", "mp4"],
-    "contentLanguage": ["tr"]
-  }
-]
+{
+  "name": "CSNuvio Repo",
+  "id": "csnuvio-repo",
+  "description": "CSNuvio Nuvio eklenti deposu",
+  "manifestVersion": 1,
+  "pluginVersion": 1,
+  "plugins": [
+    {
+      "id": "csnuvio-dizimom",
+      "name": "DiziMom",
+      "description": "DiziMom Türkçe dizi kaynakları",
+      "version": "1.0.0",
+      "author": "gs",
+      "supportedTypes": [
+        "tv"
+      ],
+      "filename": "providers/dizimom.js",
+      "enabled": true,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "tr"
+      ]
+    }
+  ]
+}
