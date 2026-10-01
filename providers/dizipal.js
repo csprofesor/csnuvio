@@ -55,17 +55,36 @@ function sanitizeText(s) {
   return (s || "").replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, "").trim();
 }
 
-function tmdbDetails(tmdbId, type) {
+function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
+  var apiKey = "1c29a5198ee1854bd5eb45dbe8d17d92";
   var endpoint = type === "tv" || type === "series" ? "tv" : "movie";
-  return fetch("https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=1c29a5198ee1854bd5eb45dbe8d17d92&language=tr-TR")
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      return {
-        title: sanitizeText(endpoint === "tv" ? d.name : d.title),
-        originalTitle: sanitizeText(endpoint === "tv" ? d.original_name : d.original_title),
-        year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4)
-      };
-    });
+  var mainUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=tr-TR";
+
+  return fetch(mainUrl).then(function(r) { return r.json(); }).then(function(d) {
+    var info = {
+      title: sanitizeText(endpoint === "tv" ? d.name : d.title),
+      originalTitle: sanitizeText(endpoint === "tv" ? d.original_name : d.original_title),
+      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4),
+      posterPath: d.poster_path ? "https://image.tmdb.org/t/p/w500" + d.poster_path : null,
+      backdropPath: d.backdrop_path ? "https://image.tmdb.org/t/p/w1280" + d.backdrop_path : null,
+      overview: d.overview || "",
+      voteAverage: d.vote_average || 0,
+      genres: (d.genres || []).map(function(g) { return g.name; })
+    };
+
+    if (endpoint === "tv" && seasonNum && episodeNum) {
+      var epUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "/episode/" + episodeNum + "?api_key=" + apiKey + "&language=tr-TR";
+      return fetch(epUrl).then(function(er) { return er.json(); }).then(function(epData) {
+        info.episodeTitle = sanitizeText(epData.name || "");
+        info.episodeOverview = epData.overview || "";
+        info.episodeAirDate = epData.air_date || "";
+        info.episodeStillPath = epData.still_path ? "https://image.tmdb.org/t/p/w500" + epData.still_path : null;
+        return info;
+      }).catch(function() { return info; });
+    }
+
+    return info;
+  });
 }
 
 function normalize(s) {
@@ -298,7 +317,7 @@ function makeStream(url, title, referer, index) {
 }
 
 function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
-  return tmdbDetails(tmdbId, mediaType).then(function(info) {
+  return tmdbDetails(tmdbId, mediaType, seasonNum, episodeNum).then(function(info) {
     if (!info || !info.title) return [];
 
     var searchNames = [info.title];
@@ -342,7 +361,8 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
           return resolveDPlayer(iframeUrl, pageUrl).then(function(streamUrls) {
             var label = info.title;
-            if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+            if (info.episodeTitle) label += " - " + info.episodeTitle;
+            else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
 
             return streamUrls.map(function(u, idx) {
               return makeStream(u, label, pageUrl, idx);
