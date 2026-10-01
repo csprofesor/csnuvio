@@ -64,21 +64,13 @@ function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
     var info = {
       title: sanitizeText(endpoint === "tv" ? d.name : d.title),
       originalTitle: sanitizeText(endpoint === "tv" ? d.original_name : d.original_title),
-      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4),
-      posterPath: d.poster_path ? "https://image.tmdb.org/t/p/w500" + d.poster_path : null,
-      backdropPath: d.backdrop_path ? "https://image.tmdb.org/t/p/w1280" + d.backdrop_path : null,
-      overview: d.overview || "",
-      voteAverage: d.vote_average || 0,
-      genres: (d.genres || []).map(function(g) { return g.name; })
+      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4)
     };
 
     if (endpoint === "tv" && seasonNum && episodeNum) {
       var epUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "/episode/" + episodeNum + "?api_key=" + apiKey + "&language=tr-TR";
       return fetch(epUrl).then(function(er) { return er.json(); }).then(function(epData) {
         info.episodeTitle = sanitizeText(epData.name || "");
-        info.episodeOverview = epData.overview || "";
-        info.episodeAirDate = epData.air_date || "";
-        info.episodeStillPath = epData.still_path ? "https://image.tmdb.org/t/p/w500" + epData.still_path : null;
         return info;
       }).catch(function() { return info; });
     }
@@ -116,8 +108,10 @@ function searchSite(title, year, seasonNum, episodeNum) {
     var candidates = [];
     var directEpLinks = [];
 
-    var epPatternUrl = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
-    var epPatternTxt = new RegExp(seasonNum + "\\.?\\s*sezon.*" + episodeNum + "\\.?\\s*bölüm", "i");
+    var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
+    var epPatternUrl2 = new RegExp("-" + episodeNum + "-bolum", "i");
+    var epPatternTxt1 = new RegExp(seasonNum + "\\.?\\s*sezon.*" + episodeNum + "\\.?\\s*bölüm", "i");
+    var epPatternTxt2 = new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm", "i");
 
     $("article, div.post-item, div.result-item, div.single-item, div.dizi-box, div.items article, a[href]").each(function(_, el) {
       var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
@@ -129,7 +123,9 @@ function searchSite(title, year, seasonNum, episodeNum) {
       var rawText = sanitizeText($(el).text().replace(/\s+/g, " "));
       var titleAttr = sanitizeText(a.attr("title") || "");
 
-      if (epPatternUrl.test(href) || epPatternTxt.test(rawText) || epPatternTxt.test(titleAttr)) {
+      if (epPatternUrl1.test(href) || epPatternTxt1.test(rawText) || epPatternTxt1.test(titleAttr)) {
+        directEpLinks.push(href);
+      } else if (seasonNum === 1 && (epPatternUrl2.test(href) || epPatternTxt2.test(rawText) || epPatternTxt2.test(titleAttr))) {
         directEpLinks.push(href);
       }
 
@@ -167,10 +163,13 @@ function searchSite(title, year, seasonNum, episodeNum) {
 function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
   return getText(seriesUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
+
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
     var epPatternUrl2 = new RegExp("/" + seasonNum + "-sezon-" + episodeNum + "-", "i");
+    var epPatternUrl3 = new RegExp("-" + episodeNum + "-bolum", "i");
     var epPatternTxt1 = new RegExp(seasonNum + "\\.?\\s*sezon\\s*" + episodeNum + "\\.?\\s*bölüm", "i");
     var epPatternTxt2 = new RegExp("\\b" + seasonNum + "x" + episodeNum + "\\b", "i");
+    var epPatternTxt3 = new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm\\b", "i");
 
     var match = null;
 
@@ -181,6 +180,8 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
       var txt = sanitizeText(($(el).text() || "").replace(/\s+/g, " "));
 
       if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
+        match = href;
+      } else if (seasonNum === 1 && (epPatternUrl3.test(href) || epPatternTxt3.test(txt))) {
         match = href;
       }
     });
@@ -228,9 +229,7 @@ function resolveEmbed(embedUrl, referer) {
     if (hash) {
       var cleanEmbed = embedUrl.split("?")[0];
       var postUrls = [];
-      if (lower.indexOf("/video/") !== -1) {
-        postUrls.push(cleanEmbed + "?do=getVideo");
-      }
+      postUrls.push(cleanEmbed + "?do=getVideo");
       var origin = embedUrl.split("/").slice(0, 3).join("/");
       postUrls.push(origin + "/player/index.php?data=" + hash + "&do=getVideo");
 

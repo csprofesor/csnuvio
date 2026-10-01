@@ -173,8 +173,10 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
 
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
     var epPatternUrl2 = new RegExp("/sezon-" + seasonNum + "/bolum-" + episodeNum + "\\b", "i");
+    var epPatternUrl3 = new RegExp("-" + episodeNum + "-bolum", "i");
     var epPatternTxt1 = new RegExp(seasonNum + "\\.?\\s*sezon\\s*" + episodeNum + "\\.?\\s*bölüm", "i");
     var epPatternTxt2 = new RegExp("\\b" + seasonNum + "x" + episodeNum + "\\b", "i");
+    var epPatternTxt3 = new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm\\b", "i");
 
     var match = null;
 
@@ -185,6 +187,8 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
       var txt = sanitizeText(($(el).text() || "").replace(/\s+/g, " "));
 
       if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
+        match = href;
+      } else if (seasonNum === 1 && (epPatternUrl3.test(href) || epPatternTxt3.test(txt))) {
         match = href;
       }
     });
@@ -240,25 +244,35 @@ function resolveEmbed(embedUrl, referer) {
     var hash = hashMatch ? hashMatch[1] : null;
 
     if (hash) {
-      var postUrl = origin + "/video/ah/";
-      return postForm(postUrl, { hash: hash }, embedUrl).then(function(resText) {
-        var urls = [];
-        var jsonMatches = resText.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/g);
-        if (jsonMatches) {
-          jsonMatches.forEach(function(m) {
-            var uMatch = m.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/);
-            if (uMatch) {
-              var u = uMatch[1].replace(/\\\//g, '/');
-              if (urls.indexOf(u) === -1) urls.push(u);
-            }
-          });
-        }
-        if (!urls.length) {
-          var m3u8Matches = resText.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);
-          if (m3u8Matches) urls = m3u8Matches;
-        }
-        return urls;
-      }).catch(function() { return []; });
+      var cleanEmbed = embedUrl.split("?")[0];
+      var postUrls = [];
+      postUrls.push(cleanEmbed + "?do=getVideo");
+      postUrls.push(origin + "/video/ah/");
+
+      function tryPost(idx) {
+        if (idx >= postUrls.length) return Promise.resolve([]);
+        return postForm(postUrls[idx], { hash: hash }, embedUrl).then(function(resText) {
+          var urls = [];
+          var jsonMatches = resText.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/g);
+          if (jsonMatches) {
+            jsonMatches.forEach(function(m) {
+              var uMatch = m.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/);
+              if (uMatch) {
+                var u = uMatch[1].replace(/\\\//g, '/');
+                if (urls.indexOf(u) === -1) urls.push(u);
+              }
+            });
+          }
+          if (!urls.length) {
+            var m3u8Matches = resText.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);
+            if (m3u8Matches) urls = m3u8Matches;
+          }
+          if (urls.length) return urls;
+          return tryPost(idx + 1);
+        }).catch(function() { return tryPost(idx + 1); });
+      }
+
+      return tryPost(0);
     }
 
     var m3u8Matches = html.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);

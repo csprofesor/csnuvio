@@ -64,21 +64,13 @@ function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
     var info = {
       title: sanitizeText(endpoint === "tv" ? d.name : d.title),
       originalTitle: sanitizeText(endpoint === "tv" ? d.original_name : d.original_title),
-      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4),
-      posterPath: d.poster_path ? "https://image.tmdb.org/t/p/w500" + d.poster_path : null,
-      backdropPath: d.backdrop_path ? "https://image.tmdb.org/t/p/w1280" + d.backdrop_path : null,
-      overview: d.overview || "",
-      voteAverage: d.vote_average || 0,
-      genres: (d.genres || []).map(function(g) { return g.name; })
+      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4)
     };
 
     if (endpoint === "tv" && seasonNum && episodeNum) {
       var epUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "/episode/" + episodeNum + "?api_key=" + apiKey + "&language=tr-TR";
       return fetch(epUrl).then(function(er) { return er.json(); }).then(function(epData) {
         info.episodeTitle = sanitizeText(epData.name || "");
-        info.episodeOverview = epData.overview || "";
-        info.episodeAirDate = epData.air_date || "";
-        info.episodeStillPath = epData.still_path ? "https://image.tmdb.org/t/p/w500" + epData.still_path : null;
         return info;
       }).catch(function() { return info; });
     }
@@ -208,8 +200,10 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
     var epPatternUrl2 = new RegExp("/s" + seasonNum + "e" + episodeNum + "\\b", "i");
     var epPatternUrl3 = new RegExp("/sezon-" + seasonNum + "/bolum-" + episodeNum + "\\b", "i");
+    var epPatternUrl4 = new RegExp("-" + episodeNum + "-bolum", "i");
     var epPatternTxt1 = new RegExp(seasonNum + "\\.?\\s*sezon\\s*" + episodeNum + "\\.?\\s*bölüm", "i");
     var epPatternTxt2 = new RegExp("\\b" + seasonNum + "x" + episodeNum + "\\b", "i");
+    var epPatternTxt3 = new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm\\b", "i");
 
     var match = null;
 
@@ -220,6 +214,8 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
       var txt = sanitizeText(($(el).text() || "").replace(/\s+/g, " "));
 
       if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternUrl3.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
+        match = href;
+      } else if (seasonNum === 1 && (epPatternUrl4.test(href) || epPatternTxt3.test(txt))) {
         match = href;
       }
     });
