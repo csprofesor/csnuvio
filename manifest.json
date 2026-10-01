@@ -1,7 +1,7 @@
 {
   "id": "csnuvio-repo",
   "name": "CSNuvio Repo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CSNuvio Nuvio eklenti deposu",
   "author": "gs",
   "manifestVersion": 1,
@@ -17,6 +17,26 @@
         "tv"
       ],
       "filename": "providers/dizimom.js",
+      "enabled": true,
+      "formats": [
+        "m3u8",
+        "mp4"
+      ],
+      "contentLanguage": [
+        "tr"
+      ]
+    },
+    {
+      "id": "csnuvio-dizipal",
+      "name": "DiziPal",
+      "description": "DiziPal Türkçe dizi ve film kaynakları",
+      "version": "1.0.0",
+      "author": "gs",
+      "supportedTypes": [
+        "tv",
+        "movie"
+      ],
+      "filename": "providers/dizipal.js",
       "enabled": true,
       "formats": [
         "m3u8",
