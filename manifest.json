@@ -3,8 +3,10 @@
   "name": "CSNuvio Repo",
   "version": "1.0.0",
   "description": "CSNuvio Nuvio eklenti deposu",
+  "author": "gs",
   "manifestVersion": 1,
   "pluginVersion": 1,
+  "type": "repository",
   "plugins": [
     {
       "id": "csnuvio-dizimom",
