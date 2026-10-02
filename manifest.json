@@ -1,7 +1,7 @@
 {
   "id": "csnuvio-repo",
   "name": "CSNuvio Repo",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "CSNuvio Nuvio eklenti deposu",
   "author": "gs",
   "manifestVersion": 1,
@@ -11,7 +11,7 @@
       "id": "csnuvio-dizimom",
       "name": "DiziMom",
       "description": "DiziMom Türkçe dizi kaynakları",
-      "version": "1.0.0",
+      "version": "1.0.3",
       "author": "gs",
       "supportedTypes": [
         "tv"
@@ -30,7 +30,7 @@
       "id": "csnuvio-dizipal",
       "name": "DiziPal",
       "description": "DiziPal Türkçe dizi ve film kaynakları",
-      "version": "1.0.0",
+      "version": "1.0.3",
       "author": "gs",
       "supportedTypes": [
         "tv",
@@ -50,7 +50,7 @@
       "id": "csnuvio-hdfilmcehennemi",
       "name": "HDFilmCehennemi",
       "description": "HDFilmCehennemi Türkçe film ve dizi kaynakları",
-      "version": "1.0.0",
+      "version": "1.0.3",
       "author": "gs",
       "supportedTypes": [
         "movie",
