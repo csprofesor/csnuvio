@@ -1,7 +1,9 @@
 var cheerio = require("cheerio-without-node-native");
 
 var DOMAINS = [
-  "https://movies2watch.watch"
+  "https://movies2watch.bz",
+  "https://movies2watch.watch",
+  "https://movies2watch.tv"
 ];
 var BASE_URL = DOMAINS[0];
 var PROVIDER_NAME = "Watch2Movies";

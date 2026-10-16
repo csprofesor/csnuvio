@@ -2,7 +2,13 @@
 
 var cheerio = require("cheerio-without-node-native");
 
-var BASE_URL = "https://filmkovasi.org";
+var BASE_DOMAINS = [
+  "https://filmkovasi.co",
+  "https://filmkovasi.org",
+  "https://filmkovasi.net"
+];
+var BASE_URL = BASE_DOMAINS[0];
+
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var HEADERS = {
   "User-Agent": USER_AGENT,
@@ -70,35 +76,58 @@ function tmdbDetails(tmdbId, type) {
   }).catch(function() { return null; });
 }
 
-function searchSite(title) {
+function searchSite(title, year) {
   var cleanTitle = sanitizeText(title);
   var q = encodeURIComponent(cleanTitle);
-  var searchUrl = BASE_URL + "/?s=" + q;
 
-  return getText(searchUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
-    var $ = cheerio.load(html);
-    var candidates = [];
-    var normTitle = normalize(cleanTitle);
+  function tryDomain(idx) {
+    if (idx >= BASE_DOMAINS.length) return Promise.resolve(null);
+    var domain = BASE_DOMAINS[idx];
+    var searchUrl = domain + "/?s=" + q;
 
-    $("div.movie-box, article.card, div.film-kutusu").each(function(_, el) {
-      var a = $(el).find("div.film-ismi a, h2 a, a").first();
-      var href = abs(a.attr("href"));
-      if (!href) return;
+    return getText(searchUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
+      var $ = cheerio.load(html);
+      var candidates = [];
+      var normTitle = normalize(cleanTitle);
 
-      var name = sanitizeText(a.text().replace(/\sizle$/i, "") || a.attr("title") || "");
-      if (!name) return;
+      $("div.movie-box, article.card, div.film-kutusu").each(function(_, el) {
+        var a = $(el).find("div.film-ismi a, a[href]").first();
+        var href = abs(a.attr("href"), domain);
+        if (!href) return;
 
-      var normName = normalize(name);
-      var dist = distance(normName, normTitle);
+        var rawName = $(el).find("div.film-ismi a, h2 a, .title").text() || $(el).find("img").attr("alt") || a.attr("title") || "";
+        var yearInName = (rawName.match(/\b(19\d\d|20\d\d)\b/) || [])[1];
+        var name = rawName
+          .replace(/\s*\(\s*\d{4}\s*\)/g, "")
+          .replace(/\s*(?:İzle|izle|İZLE|Filmi izle|Film izle)$/gi, "")
+          .trim();
+        name = sanitizeText(name);
+        if (!name) return;
 
-      if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-        candidates.push({ href: href, name: name, score: dist });
+        var normName = normalize(name);
+        var dist = distance(normName, normTitle);
+
+        if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+          var score = dist;
+          if (year && yearInName && yearInName === year) {
+            score -= 20;
+          }
+          candidates.push({ href: href, name: name, score: score, domain: domain });
+        }
+      });
+
+      if (candidates.length) {
+        candidates.sort(function(a, b) { return a.score - b.score; });
+        return candidates[0];
       }
-    });
 
-    candidates.sort(function(a, b) { return a.score - b.score; });
-    return candidates.length ? candidates[0].href : null;
-  }).catch(function() { return null; });
+      return tryDomain(idx + 1);
+    }).catch(function() {
+      return tryDomain(idx + 1);
+    });
+  }
+
+  return tryDomain(0);
 }
 
 function resolvePlayerScript(iframeUrl) {
@@ -144,13 +173,35 @@ function resolvePlayerScript(iframeUrl) {
   }).catch(function() { return []; });
 }
 
-function resolveFilmKovasi(movieUrl) {
-  return getText(movieUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function extractAtobIframes(rawHtml) {
+  var urls = [];
+  var regex = /atob\(["']([A-Za-z0-9+/=]+)["']\)/g;
+  var m;
+  while ((m = regex.exec(rawHtml)) !== null) {
+    try {
+      var decoded = atob(m[1]);
+      var parsed = JSON.parse(decoded);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(function(u) {
+          if (u && urls.indexOf(u) === -1) urls.push(u.replace(/\\\//g, "/"));
+        });
+      } else if (typeof parsed === "string") {
+        urls.push(parsed.replace(/\\\//g, "/"));
+      }
+    } catch (_) {}
+  }
+  return urls;
+}
+
+function resolveFilmKovasi(movieUrl, domain) {
+  return getText(movieUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
-    var iframes = [];
+    var iframes = extractAtobIframes(html);
 
     var mainIframe = abs($("iframe").first().attr("src"), movieUrl);
-    if (mainIframe) iframes.push(mainIframe);
+    if (mainIframe && mainIframe !== "about:blank" && iframes.indexOf(mainIframe) === -1) {
+      iframes.push(mainIframe);
+    }
 
     var sourceLinks = [];
     $("div.sources a").each(function(_, el) {
@@ -161,18 +212,28 @@ function resolveFilmKovasi(movieUrl) {
     var altPromises = sourceLinks.map(function(sUrl) {
       return getText(sUrl, { headers: { Referer: movieUrl } }).then(function(sHtml) {
         var s$ = cheerio.load(sHtml);
+        var extra = extractAtobIframes(sHtml);
         var iffi = abs(s$("iframe").first().attr("src"), sUrl);
-        return iffi;
-      }).catch(function() { return null; });
+        if (iffi && iffi !== "about:blank" && extra.indexOf(iffi) === -1) extra.push(iffi);
+        return extra;
+      }).catch(function() { return []; });
     });
 
-    return Promise.all(altPromises).then(function(extraIframes) {
-      extraIframes.forEach(function(ifr) {
-        if (ifr && iframes.indexOf(ifr) === -1) iframes.push(ifr);
+    return Promise.all(altPromises).then(function(extraArrays) {
+      extraArrays.forEach(function(arr) {
+        arr.forEach(function(ifr) {
+          if (ifr && iframes.indexOf(ifr) === -1) iframes.push(ifr);
+        });
       });
 
       var resolvePromises = iframes.map(function(ifr) {
-        return resolvePlayerScript(ifr);
+        return resolvePlayerScript(ifr).then(function(streams) {
+          if (streams.length) return streams;
+          if (ifr && ifr.startsWith("http")) {
+            return [ifr];
+          }
+          return [];
+        });
       });
 
       return Promise.all(resolvePromises).then(function(resultsArray) {
@@ -182,13 +243,16 @@ function resolveFilmKovasi(movieUrl) {
             if (u && finalStreams.indexOf(u) === -1) finalStreams.push(u);
           });
         });
+        if (!finalStreams.length && iframes.length) {
+          finalStreams = iframes;
+        }
         return finalStreams;
       });
     });
   }).catch(function() { return []; });
 }
 
-function makeStream(url, title, index) {
+function makeStream(url, title, referer, index) {
   var lower = url.toLowerCase();
   var quality = "HD";
   var q = lower.match(/(?:2160|1440|1080|720|576|480|360)p/);
@@ -197,20 +261,20 @@ function makeStream(url, title, index) {
 
   var isHls = lower.indexOf(".m3u8") !== -1;
   return {
-    name: "FilmKovasi",
+    name: "FilmKovası",
     title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
     url: url,
     quality: quality,
     type: isHls ? "hls" : "mp4",
     headers: {
-      "Referer": BASE_URL + "/",
+      "Referer": referer || BASE_URL + "/",
       "User-Agent": USER_AGENT
     },
     provider: "filmkovasi"
   };
 }
 
-function getStreams(tmdbId, mediaType) {
+function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
   if (mediaType === "tv" || mediaType === "series") return Promise.resolve([]);
 
   return tmdbDetails(tmdbId, mediaType).then(function(info) {
@@ -219,27 +283,26 @@ function getStreams(tmdbId, mediaType) {
     var searchNames = [info.title];
     if (info.originalTitle && info.originalTitle !== info.title) searchNames.push(info.originalTitle);
 
-    function trySearch(i) {
+    function tryName(i) {
       if (i >= searchNames.length) return Promise.resolve(null);
-      return searchSite(searchNames[i]).then(function(url) {
-        if (url) return url;
-        return trySearch(i + 1);
-      }).catch(function() { return trySearch(i + 1); });
+      return searchSite(searchNames[i], info.year).then(function(res) {
+        if (res && res.href) return res;
+        return tryName(i + 1);
+      }).catch(function() { return tryName(i + 1); });
     }
 
-    return trySearch(0).then(function(movieUrl) {
-      if (!movieUrl) return [];
+    return tryName(0).then(function(searchResult) {
+      if (!searchResult || !searchResult.href) return [];
 
-      return resolveFilmKovasi(movieUrl).then(function(streamUrls) {
+      var domain = searchResult.domain || BASE_URL;
+      return resolveFilmKovasi(searchResult.href, domain).then(function(streams) {
         var label = info.title + (info.year ? " (" + info.year + ")" : "");
-        return streamUrls.map(function(u, idx) {
-          return makeStream(u, label, idx);
+        return streams.map(function(u, idx) {
+          return makeStream(u, label, searchResult.href, idx);
         });
       });
     });
-  }).catch(function() {
-    return [];
-  });
+  }).catch(function() { return []; });
 }
 
 if (typeof module !== "undefined" && module.exports) {

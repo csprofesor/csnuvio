@@ -110,11 +110,21 @@ function distance(a, b) {
 async function webCryptoDecrypt(rawJsonText) {
   var passphrase = "3hPn4uCjTVtfYWcjIcoJQ4cL1WWk1qxXI39egLYOmNv6IblA7eKJz68uU3eLzux1biZLCms0quEjTYniGv5z1JcKbNIsDQFSeIZOBZJz4is6pD7UyWDggWWzTLBQbHcQFpBQdClnuQaMNUHtLHTpzCvZy33p6I7wFBvL4fnXBYH84aUIyWGTRvM2G5cfoNf4705tO2kv";
 
-  var ctMatch = rawJsonText.match(/"ciphertext"\s*:\s*"([^"]+)"/);
-  var ivMatch = rawJsonText.match(/"iv"\s*:\s*"([^"]+)"/);
-  var saltMatch = rawJsonText.match(/"salt"\s*:\s*"([^"]+)"/);
+  var json = null;
+  try { json = JSON.parse(rawJsonText); } catch (_) {}
+  var ct = (json && json.ciphertext) ? json.ciphertext : null;
+  var iv = (json && json.iv) ? json.iv : null;
+  var salt = (json && json.salt) ? json.salt : null;
 
-  if (!ctMatch || !ivMatch || !saltMatch) return null;
+  if (!ct || !iv || !salt) {
+    var ctMatch = rawJsonText.match(/"ciphertext"\s*:\s*"([^"]+)"/);
+    var ivMatch = rawJsonText.match(/"iv"\s*:\s*"([^"]+)"/);
+    var saltMatch = rawJsonText.match(/"salt"\s*:\s*"([^"]+)"/);
+    if (!ctMatch || !ivMatch || !saltMatch) return null;
+    ct = ctMatch[1].replace(/\\/g, "");
+    iv = ivMatch[1];
+    salt = saltMatch[1];
+  }
 
   function hexToBuf(hex) {
     var bytes = new Uint8Array(hex.length / 2);
@@ -134,9 +144,9 @@ async function webCryptoDecrypt(rawJsonText) {
   }
 
   try {
-    var saltBuf = hexToBuf(saltMatch[1]);
-    var ivBuf = hexToBuf(ivMatch[1]);
-    var ctBuf = b64ToBuf(ctMatch[1]);
+    var saltBuf = hexToBuf(salt);
+    var ivBuf = hexToBuf(iv);
+    var ctBuf = b64ToBuf(ct);
 
     var enc = new TextEncoder();
     var passKey = await globalThis.crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
@@ -191,8 +201,8 @@ function searchSite(title, isMovie) {
           var results = (json.data && json.data.result) || [];
 
           results.forEach(function(item) {
-            var itemTitle = sanitizeText(item.trTitle || item.title || "");
-            var slug = item.slug || "";
+            var itemTitle = sanitizeText(item.object_name || item.trTitle || item.title || "");
+            var slug = item.used_slug || item.slug || "";
             if (!itemTitle || !slug) return;
 
             var normName = normalize(itemTitle);
@@ -200,7 +210,7 @@ function searchSite(title, isMovie) {
 
             if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
               var href = slug.startsWith("http") ? slug : domain + "/" + slug.replace(/^\//, "");
-              var itemType = (item.type || "").toLowerCase();
+              var itemType = (item.used_type || item.type || "").toLowerCase();
               var itemIsMovie = itemType === "movies" || itemType === "film" || href.indexOf("/film/") !== -1 || href.indexOf("/movies/") !== -1;
 
               if (isMovie && !itemIsMovie) return;
@@ -270,9 +280,10 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, domain, seasonNum, episodeNum) {
     var $ = cheerio.load(html);
 
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
-    var epPatternUrl2 = new RegExp("/s" + seasonNum + "e" + episodeNum + "\\b", "i");
-    var epPatternUrl3 = new RegExp("/sezon-" + seasonNum + "/bolum-" + episodeNum + "\\b", "i");
-    var epPatternUrl4 = new RegExp("-" + episodeNum + "-bolum", "i");
+    var epPatternUrl2 = new RegExp("/" + seasonNum + "-sezon/" + episodeNum + "-bolum", "i");
+    var epPatternUrl3 = new RegExp("/s" + seasonNum + "e" + episodeNum + "\\b", "i");
+    var epPatternUrl4 = new RegExp("/sezon-" + seasonNum + "/bolum-" + episodeNum + "\\b", "i");
+    var epPatternUrl5 = new RegExp("-" + episodeNum + "-bolum", "i");
     var epPatternTxt1 = new RegExp(seasonNum + "\\.?\\s*sezon\\s*" + episodeNum + "\\.?\\s*bölüm", "i");
     var epPatternTxt2 = new RegExp("\\b" + seasonNum + "x" + episodeNum + "\\b", "i");
     var epPatternTxt3 = new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm\\b", "i");
@@ -285,9 +296,9 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, domain, seasonNum, episodeNum) {
       if (!href) return;
       var txt = sanitizeText(($(el).text() || "").replace(/\s+/g, " "));
 
-      if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternUrl3.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
+      if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternUrl3.test(href) || epPatternUrl4.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
         match = href;
-      } else if (seasonNum === 1 && (epPatternUrl4.test(href) || epPatternTxt3.test(txt))) {
+      } else if (seasonNum === 1 && (epPatternUrl5.test(href) || epPatternTxt3.test(txt))) {
         match = href;
       }
     });
@@ -459,6 +470,10 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                 if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
               });
             });
+
+            if (!streamUrls.length && iframeUrls.length) {
+              streamUrls = iframeUrls;
+            }
 
             var label = info.title;
             if (!isMovie) {
