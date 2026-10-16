@@ -2,7 +2,14 @@
 
 var cheerio = require("cheerio-without-node-native");
 
-var BASE_URL = "https://dizipal1583.com";
+var BASE_DOMAINS = [
+  "https://dizipal1820.com",
+  "https://dizipal1821.com",
+  "https://dizipal1819.com",
+  "https://dizipal.cat",
+  "https://dizipal.com"
+];
+
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var HEADERS = {
   "User-Agent": USER_AGENT,
@@ -13,7 +20,7 @@ var HEADERS = {
 function abs(url, base) {
   if (!url) return null;
   if (url.startsWith("//")) return "https:" + url;
-  try { return new URL(url, base || BASE_URL).toString(); }
+  try { return new URL(url, base || BASE_DOMAINS[0]).toString(); }
   catch (_) { return url; }
 }
 
@@ -39,7 +46,7 @@ function postForm(url, data, referer) {
   var headers = Object.assign({}, HEADERS, {
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
-    "Referer": referer || BASE_URL + "/"
+    "Referer": referer || BASE_DOMAINS[0] + "/"
   });
   return fetch(url, {
     method: "POST",
@@ -154,47 +161,112 @@ async function webCryptoDecrypt(rawJsonText) {
   }
 }
 
-function searchSite(title) {
-  var searchUrl = BASE_URL + "/bg/searchcontent";
-  var postData = {
-    "cKey": "c61f91c5141d178450934fe81c0a2029",
-    "cValue": "MTc4NDQwNzIwMDhkMzJhNTc1YzUwOGU1ZjQwMjdjMjIyOWVjOGVhMTcwNGQyM2FjODM2YTI4YTU0NjUyMjI2ZmVjMzFkYzBkMWQyMWY4YzdiNA==",
-    "type": "hepsi",
-    "searchterm": title
-  };
+function searchSite(title, isMovie) {
+  var cleanTitle = sanitizeText(title);
 
-  return postForm(searchUrl, postData, BASE_URL + "/").then(function(resText) {
-    try {
-      var json = JSON.parse(resText);
-      var results = (json.data && json.data.result) || [];
-      var candidates = [];
+  function tryDomain(idx) {
+    if (idx >= BASE_DOMAINS.length) return Promise.resolve(null);
+    var domain = BASE_DOMAINS[idx];
 
-      var normTitle = normalize(title);
+    // First try obtaining cKey/cValue from main page
+    return getText(domain + "/", { headers: { Referer: domain + "/" } }).then(function(mainHtml) {
+      var $m = cheerio.load(mainHtml);
+      var cKey = $m("input[name='cKey']").val() || "c61f91c5141d178450934fe81c0a2029";
+      var cValue = $m("input[name='cValue']").val() || "MTc4NDQwNzIwMDhkMzJhNTc1YzUwOGU1ZjQwMjdjMjIyOWVjOGVhMTcwNGQyM2FjODM2YTI4YTU0NjUyMjI2ZmVjMzFkYzBkMWQyMWY4YzdiNA==";
 
-      results.forEach(function(item) {
-        var itemTitle = sanitizeText(item.title || "");
-        var slug = item.slug || "";
-        if (!itemTitle || !slug) return;
+      var searchUrl = domain + "/bg/searchcontent";
+      var postData = {
+        "cKey": cKey,
+        "cValue": cValue,
+        "type": "hepsi",
+        "searchterm": cleanTitle
+      };
 
-        var normName = normalize(itemTitle);
-        var dist = distance(normName, normTitle);
+      return postForm(searchUrl, postData, domain + "/").then(function(resText) {
+        var candidates = [];
+        var normTitle = normalize(cleanTitle);
 
-        if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-          var href = slug.startsWith("http") ? slug : BASE_URL + "/" + slug.replace(/^\//, "");
-          candidates.push({ href: href, name: itemTitle, score: dist, type: item.type });
+        try {
+          var json = JSON.parse(resText);
+          var results = (json.data && json.data.result) || [];
+
+          results.forEach(function(item) {
+            var itemTitle = sanitizeText(item.trTitle || item.title || "");
+            var slug = item.slug || "";
+            if (!itemTitle || !slug) return;
+
+            var normName = normalize(itemTitle);
+            var dist = distance(normName, normTitle);
+
+            if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+              var href = slug.startsWith("http") ? slug : domain + "/" + slug.replace(/^\//, "");
+              var itemType = (item.type || "").toLowerCase();
+              var itemIsMovie = itemType === "movies" || itemType === "film" || href.indexOf("/film/") !== -1 || href.indexOf("/movies/") !== -1;
+
+              if (isMovie && !itemIsMovie) return;
+              if (!isMovie && itemIsMovie) return;
+
+              candidates.push({ href: href, name: itemTitle, score: dist, domain: domain });
+            }
+          });
+        } catch (_) {}
+
+        if (candidates.length) {
+          candidates.sort(function(a, b) { return a.score - b.score; });
+          return candidates[0];
         }
-      });
 
-      candidates.sort(function(a, b) { return a.score - b.score; });
-      return candidates.length ? candidates[0].href : null;
-    } catch (_) {
-      return null;
-    }
-  }).catch(function() { return null; });
+        // Fallback: HTML search
+        var searchPageUrl = domain + "/arama?q=" + encodeURIComponent(cleanTitle);
+        return getText(searchPageUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
+          var $ = cheerio.load(html);
+          var htmlCandidates = [];
+
+          var cardSelector = "li.content-card, article.content-card, article.dp-card, div.dp-card, div.movie-item, div.serie-item, div.content-item, a.top10-item, div.top10-item, a.trend-rank-card, a.m3-surface-2, .m3-surface-2, a[href*='/dizi/'], a[href*='/film/']";
+
+          $(cardSelector).each(function(_, el) {
+            var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
+            var href = abs(a.attr("href"), domain);
+            if (!href) return;
+
+            var itemIsMovie = href.indexOf("/film/") !== -1 || href.indexOf("/movies/") !== -1;
+            if (isMovie && !itemIsMovie) return;
+            if (!isMovie && itemIsMovie) return;
+
+            var titleFromEl = $(el).find(".card-title, .top10-title-text, h2, h3, h4, .title, .name, .content-title, .dp-title").text() || a.attr("title") || $(el).attr("title") || "";
+            var rawTitle = sanitizeText(titleFromEl.replace(/\s+/g, " "));
+            if (!rawTitle) return;
+
+            var normName = normalize(rawTitle);
+            var dist = distance(normName, normTitle);
+
+            if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+              htmlCandidates.push({ href: href, name: rawTitle, score: dist, domain: domain });
+            }
+          });
+
+          if (htmlCandidates.length) {
+            htmlCandidates.sort(function(a, b) { return a.score - b.score; });
+            return htmlCandidates[0];
+          }
+
+          return tryDomain(idx + 1);
+        }).catch(function() {
+          return tryDomain(idx + 1);
+        });
+      }).catch(function() {
+        return tryDomain(idx + 1);
+      });
+    }).catch(function() {
+      return tryDomain(idx + 1);
+    });
+  }
+
+  return tryDomain(0);
 }
 
-function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
-  return getText(seriesUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function findEpisodeUrlOnSeriesPage(seriesUrl, domain, seasonNum, episodeNum) {
+  return getText(seriesUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
 
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
@@ -207,7 +279,7 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
 
     var match = null;
 
-    $("a[href]").each(function(_, el) {
+    $("a[href*='-bolum'], a[href*='/bolum/'], a[href*='-episode'], a[href*='/episode/'], li.episode-item a, div.episode-card a, a.dp-detail-episode, .detail-episode-item-wrap a, a[href]").each(function(_, el) {
       if (match) return;
       var href = abs($(el).attr("href"), seriesUrl);
       if (!href) return;
@@ -220,7 +292,9 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
       }
     });
 
-    return match;
+    return match || seriesUrl;
+  }).catch(function() {
+    return seriesUrl;
   });
 }
 
@@ -305,7 +379,7 @@ function makeStream(url, title, referer, index) {
     quality: quality,
     type: isHls ? "hls" : "mp4",
     headers: {
-      "Referer": referer || BASE_URL + "/",
+      "Referer": referer || BASE_DOMAINS[0] + "/",
       "User-Agent": USER_AGENT
     },
     provider: "dizipal"
@@ -313,6 +387,12 @@ function makeStream(url, title, referer, index) {
 }
 
 function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  var isMovie = mediaType === "movie" || mediaType === "film";
+
+  if (!isMovie && (!seasonNum || !episodeNum)) {
+    return Promise.resolve([]);
+  }
+
   return tmdbDetails(tmdbId, mediaType, seasonNum, episodeNum).then(function(info) {
     if (!info || !info.title) return [];
 
@@ -321,44 +401,72 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
     function tryName(i) {
       if (i >= searchNames.length) return Promise.resolve(null);
-      return searchSite(searchNames[i]).then(function(url) {
-        if (url) return url;
+      return searchSite(searchNames[i], isMovie).then(function(res) {
+        if (res && res.href) return res;
         return tryName(i + 1);
       }).catch(function() { return tryName(i + 1); });
     }
 
-    return tryName(0).then(function(itemUrl) {
-      if (!itemUrl) return [];
+    return tryName(0).then(function(searchResult) {
+      if (!searchResult || !searchResult.href) return [];
 
-      var targetPromise = (mediaType === "tv" || mediaType === "series") && seasonNum && episodeNum
-        ? findEpisodeUrlOnSeriesPage(itemUrl, seasonNum, episodeNum)
-        : Promise.resolve(itemUrl);
+      var domain = searchResult.domain || BASE_DOMAINS[0];
+      var targetPromise = isMovie
+        ? Promise.resolve(searchResult.href)
+        : findEpisodeUrlOnSeriesPage(searchResult.href, domain, seasonNum, episodeNum);
 
       return targetPromise.then(function(pageUrl) {
-        if (!pageUrl) pageUrl = itemUrl;
+        if (!pageUrl) pageUrl = searchResult.href;
 
-        return getText(pageUrl, { headers: { Referer: BASE_URL + "/" } }).then(async function(html) {
+        return getText(pageUrl, { headers: { Referer: domain + "/" } }).then(async function(html) {
           var $ = cheerio.load(html);
+          var iframeUrls = [];
+
+          // 1. PBKDF2 Encrypted player in div[data-rm-k=true]
           var encryptedDiv = $("div[data-rm-k=true]").first();
           var rawEncrypted = encryptedDiv.length ? encryptedDiv.text() : "";
 
-          var iframeUrl = null;
           if (rawEncrypted) {
-            iframeUrl = await webCryptoDecrypt(rawEncrypted);
+            var decryptedUrl = await webCryptoDecrypt(rawEncrypted);
+            if (decryptedUrl) {
+              if (decryptedUrl.indexOf(".m3u8") !== -1) {
+                var label = info.title + (isMovie && info.year ? " (" + info.year + ")" : (seasonNum && episodeNum ? " S" + seasonNum + "E" + episodeNum : ""));
+                return [makeStream(decryptedUrl, label, pageUrl, 0)];
+              }
+              iframeUrls.push(decryptedUrl);
+            }
           }
 
-          if (!iframeUrl) {
-            var iframeEl = $("iframe").first();
-            iframeUrl = iframeEl.attr("data-src") || iframeEl.attr("src");
-            if (iframeUrl && iframeUrl.startsWith("//")) iframeUrl = "https:" + iframeUrl;
-          }
+          // 2. Legacy data-cfg or iframes
+          $("iframe").each(function(_, el) {
+            var src = $(el).attr("data-src") || $(el).attr("src");
+            if (src && src.startsWith("//")) src = "https:" + src;
+            if (src && src !== "about:blank" && iframeUrls.indexOf(src) === -1) {
+              iframeUrls.push(src);
+            }
+          });
 
-          if (!iframeUrl) return [];
+          if (!iframeUrls.length) return [];
 
-          return resolveDPlayer(iframeUrl, pageUrl).then(function(streamUrls) {
+          var resolvePromises = iframeUrls.map(function(iframe) {
+            return resolveDPlayer(iframe, pageUrl);
+          });
+
+          return Promise.all(resolvePromises).then(function(results) {
+            var streamUrls = [];
+            results.forEach(function(arr) {
+              arr.forEach(function(u) {
+                if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
+              });
+            });
+
             var label = info.title;
-            if (info.episodeTitle) label += " - " + info.episodeTitle;
-            else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+            if (!isMovie) {
+              if (info.episodeTitle) label += " - " + info.episodeTitle;
+              else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+            } else if (info.year) {
+              label += " (" + info.year + ")";
+            }
 
             return streamUrls.map(function(u, idx) {
               return makeStream(u, label, pageUrl, idx);

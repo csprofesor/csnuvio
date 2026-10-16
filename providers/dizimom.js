@@ -2,7 +2,13 @@
 
 var cheerio = require("cheerio-without-node-native");
 
-var BASE_URL = "https://www.dizimom.wiki";
+var BASE_DOMAINS = [
+  "https://ddizimom.net",
+  "https://dizimom.plus",
+  "https://www.dizimom.wiki",
+  "https://dizimom.vip"
+];
+
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var HEADERS = {
   "User-Agent": USER_AGENT,
@@ -13,7 +19,7 @@ var HEADERS = {
 function abs(url, base) {
   if (!url) return null;
   if (url.startsWith("//")) return "https:" + url;
-  try { return new URL(url, base || BASE_URL).toString(); }
+  try { return new URL(url, base || BASE_DOMAINS[0]).toString(); }
   catch (_) { return url; }
 }
 
@@ -39,7 +45,7 @@ function postForm(url, data, referer) {
   var headers = Object.assign({}, HEADERS, {
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
-    "Referer": referer || BASE_URL + "/"
+    "Referer": referer || BASE_DOMAINS[0] + "/"
   });
   return fetch(url, {
     method: "POST",
@@ -100,68 +106,108 @@ function distance(a, b) {
   return d[a.length][b.length];
 }
 
-function searchSite(title, year, seasonNum, episodeNum) {
+function searchSite(title, year, isMovie, seasonNum, episodeNum) {
   var cleanTitle = sanitizeText(title);
   var q = encodeURIComponent(cleanTitle);
-  return getText(BASE_URL + "/?s=" + q).then(function(html) {
-    var $ = cheerio.load(html);
-    var candidates = [];
-    var directEpLinks = [];
 
-    var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
-    var epPatternUrl2 = new RegExp("-" + episodeNum + "-bolum", "i");
-    var epPatternTxt1 = new RegExp(seasonNum + "\\.?\\s*sezon.*" + episodeNum + "\\.?\\s*bölüm", "i");
-    var epPatternTxt2 = new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm", "i");
+  function tryDomain(idx) {
+    if (idx >= BASE_DOMAINS.length) return Promise.resolve(null);
+    var domain = BASE_DOMAINS[idx];
 
-    $("article, div.post-item, div.result-item, div.single-item, div.dizi-box, div.items article, a[href]").each(function(_, el) {
-      var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
-      var href = abs(a.attr("href"));
-      if (!href || href.indexOf(BASE_URL) === -1) return;
+    var searchUrls = [
+      domain + "/ara?q=" + q,
+      domain + "/?s=" + q
+    ];
 
-      if (href.indexOf("/tum-diziler/") !== -1 || href.indexOf("/dizi-takvimi/") !== -1 || href.indexOf("/yardim/") !== -1 || href.indexOf("/iletisim/") !== -1) return;
+    function trySearchUrl(sIdx) {
+      if (sIdx >= searchUrls.length) return tryDomain(idx + 1);
 
-      var rawText = sanitizeText($(el).text().replace(/\s+/g, " "));
-      var titleAttr = sanitizeText(a.attr("title") || "");
+      return getText(searchUrls[sIdx], { headers: { Referer: domain + "/" } }).then(function(html) {
+        var $ = cheerio.load(html);
+        var candidates = [];
+        var directEpLinks = [];
 
-      if (epPatternUrl1.test(href) || epPatternTxt1.test(rawText) || epPatternTxt1.test(titleAttr)) {
-        directEpLinks.push(href);
-      } else if (seasonNum === 1 && (epPatternUrl2.test(href) || epPatternTxt2.test(rawText) || epPatternTxt2.test(titleAttr))) {
-        directEpLinks.push(href);
-      }
+        var epPatternUrl1 = seasonNum && episodeNum ? new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i") : null;
+        var epPatternUrl2 = episodeNum ? new RegExp("-" + episodeNum + "-bolum", "i") : null;
+        var epPatternTxt1 = seasonNum && episodeNum ? new RegExp(seasonNum + "\\.?\\s*sezon.*" + episodeNum + "\\.?\\s*bölüm", "i") : null;
+        var epPatternTxt2 = episodeNum ? new RegExp("\\b" + episodeNum + "\\.?\\s*bölüm", "i") : null;
 
-      var cleanName = (a.find("h2, h3, .title, .categorytitle").first().text() || a.attr("title") || rawText)
-        .replace(/Favorilere Ekle/gi, "")
-        .replace(/IMDb\s*:?\s*[0-9.]+/gi, "")
-        .replace(/izle/gi, "")
-        .replace(/\s+/g, " ")
-        .trim();
+        $("a.group, a[href*='/dizi/'], a[href*='/film/'], a[href*='/anime/'], article, div.post-item, div.result-item, div.single-item, div.dizi-box, div.items article, a[href]").each(function(_, el) {
+          var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
+          var href = a.attr("href");
+          if (!href) return;
+          href = abs(href, domain);
+          if (!href) return;
 
-      cleanName = sanitizeText(cleanName);
-      if (!cleanName) return;
+          if (href.indexOf("/tum-diziler/") !== -1 || href.indexOf("/dizi-takvimi/") !== -1 || href.indexOf("/yardim/") !== -1 || href.indexOf("/iletisim/") !== -1) return;
+          if (href.indexOf("/sezon-") !== -1 && href.indexOf("/bolum-") === -1 && href.indexOf("?sezon=") === -1) return;
 
-      var normName = normalize(cleanName);
-      var normTitle = normalize(cleanTitle);
+          var isFilmLink = href.indexOf("/film/") !== -1;
+          var isDiziLink = href.indexOf("/dizi/") !== -1 || href.indexOf("/anime/") !== -1 || href.indexOf("-dizi") !== -1;
 
-      var isMatch = normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || distance(normName, normTitle) <= 6;
-      if (isMatch) {
-        var isSeriesLink = href.indexOf("/diziler/") !== -1 || href.indexOf("-dizi") !== -1;
-        var score = distance(normName, normTitle);
-        if (isSeriesLink) score -= 15;
-        candidates.push({ href: href, name: cleanName, score: score });
-      }
-    });
+          if (isMovie && isDiziLink && !isFilmLink) return;
+          if (!isMovie && isFilmLink) return;
 
-    candidates.sort(function(a, b) { return a.score - b.score; });
+          var rawText = sanitizeText($(el).text().replace(/\s+/g, " "));
+          var titleAttr = sanitizeText(a.attr("title") || "");
 
-    return {
-      directEp: directEpLinks.length ? directEpLinks[0] : null,
-      seriesUrl: candidates.length ? candidates[0].href : null
-    };
-  });
+          if (!isMovie && seasonNum && episodeNum) {
+            if (epPatternUrl1 && (epPatternUrl1.test(href) || (epPatternTxt1 && epPatternTxt1.test(rawText)) || (epPatternTxt1 && epPatternTxt1.test(titleAttr)))) {
+              directEpLinks.push(href);
+            } else if (seasonNum === 1 && epPatternUrl2 && (epPatternUrl2.test(href) || (epPatternTxt2 && epPatternTxt2.test(rawText)) || (epPatternTxt2 && epPatternTxt2.test(titleAttr)))) {
+              directEpLinks.push(href);
+            }
+          }
+
+          var hTag = a.find("h1, h2, h3, .title, .entry-title, .categorytitle").first();
+          var cleanName = (hTag.length ? hTag.text() : a.attr("title") || rawText)
+            .replace(/Favorilere Ekle/gi, "")
+            .replace(/IMDb\s*:?\s*[0-9.]+/gi, "")
+            .replace(/Dizi\s*izle/gi, "")
+            .replace(/Film\s*izle/gi, "")
+            .replace(/izle/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          cleanName = sanitizeText(cleanName);
+          if (!cleanName) return;
+
+          var normName = normalize(cleanName);
+          var normTitle = normalize(cleanTitle);
+
+          var isMatch = normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || distance(normName, normTitle) <= 6;
+          if (isMatch) {
+            var score = distance(normName, normTitle);
+            if (isMovie && isFilmLink) score -= 20;
+            if (!isMovie && isDiziLink) score -= 20;
+            candidates.push({ href: href, name: cleanName, score: score, domain: domain });
+          }
+        });
+
+        candidates.sort(function(a, b) { return a.score - b.score; });
+
+        if (candidates.length || directEpLinks.length) {
+          return {
+            domain: domain,
+            directEp: directEpLinks.length ? directEpLinks[0] : null,
+            targetUrl: candidates.length ? candidates[0].href : null
+          };
+        }
+
+        return trySearchUrl(sIdx + 1);
+      }).catch(function() {
+        return trySearchUrl(sIdx + 1);
+      });
+    }
+
+    return trySearchUrl(0);
+  }
+
+  return tryDomain(0);
 }
 
-function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
-  return getText(seriesUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function findEpisodeUrlOnSeriesPage(seriesUrl, domain, seasonNum, episodeNum) {
+  return getText(seriesUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
 
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
@@ -173,7 +219,7 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
 
     var match = null;
 
-    $("a[href]").each(function(_, el) {
+    $("a[href*='/bolum-'], a[href*='bolum'], a[href]").each(function(_, el) {
       if (match) return;
       var href = abs($(el).attr("href"), seriesUrl);
       if (!href) return;
@@ -186,36 +232,151 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
       }
     });
 
-    return match;
+    if (match) return match;
+
+    // Check season tabs if not found
+    var seasonLinks = [];
+    $("a[href*='?sezon='], a[href*='sezon-']").each(function(_, el) {
+      var h = abs($(el).attr("href"), seriesUrl);
+      var sMatch = h ? h.match(/sezon[=-](\d+)/i) : null;
+      if (sMatch && parseInt(sMatch[1], 10) === seasonNum) {
+        seasonLinks.push(h);
+      }
+    });
+
+    if (seasonLinks.length) {
+      return getText(seasonLinks[0], { headers: { Referer: seriesUrl } }).then(function(sHtml) {
+        var $s = cheerio.load(sHtml);
+        var sMatchEp = null;
+        $s("a[href*='/bolum-'], a[href*='bolum']").each(function(_, el) {
+          if (sMatchEp) return;
+          var href = abs($s(el).attr("href"), seasonLinks[0]);
+          if (!href) return;
+          var txt = sanitizeText(($s(el).text() || "").replace(/\s+/g, " "));
+          if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
+            sMatchEp = href;
+          } else if (seasonNum === 1 && (epPatternUrl3.test(href) || epPatternTxt3.test(txt))) {
+            sMatchEp = href;
+          }
+        });
+        return sMatchEp || seriesUrl;
+      }).catch(function() { return seriesUrl; });
+    }
+
+    return seriesUrl;
+  }).catch(function() {
+    return seriesUrl;
   });
 }
 
-function findIframes(pageUrl) {
-  return getText(pageUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function extractStreamsFromPage(pageUrl, domain) {
+  return getText(pageUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
-    var links = [];
+    var streamUrls = [];
+    var iframes = [];
 
+    // 1. Pilavyer data-pv SLUG
+    var pvRegex = /data-pv=["']([^"']+)["']/g;
+    var pvMatches = [];
+    var m;
+    while ((m = pvRegex.exec(html)) !== null) {
+      if (pvMatches.indexOf(m[1]) === -1) pvMatches.push(m[1]);
+    }
+
+    // Dynamic candidate script hosts
+    var scriptHosts = [];
+    var hostRegex = /https?:\/\/([a-zA-Z0-9.-]+)\/(?:assets\/js\/core\.js|e\/c\.js)/g;
+    while ((m = hostRegex.exec(html)) !== null) {
+      if (scriptHosts.indexOf(m[1]) === -1) scriptHosts.push(m[1]);
+    }
+
+    var candidateHosts = scriptHosts.concat([
+      "play2.pilavyerplay.top",
+      "pilavyerplay.top",
+      "play.pilavyerplay.top",
+      "pilavyer.top"
+    ]).filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+    var pvPromises = pvMatches.map(function(slug) {
+      function tryHost(hIdx) {
+        if (hIdx >= candidateHosts.length) return Promise.resolve(null);
+        var host = candidateHosts[hIdx];
+        var sUrl = "https://" + host + "/assets/js/s.php?s=" + slug;
+
+        return getText(sUrl, { headers: { Referer: domain + "/" } }).then(function(resText) {
+          var pMatch = resText.match(/window\.__PLAYER__\s*=\s*(\{.*?\}|\{.*?\n\});/s);
+          if (pMatch) {
+            var streamMatch = pMatch[1].match(/"stream"\s*:\s*"([^"]+)"/);
+            if (streamMatch) {
+              var sUrlResolved = streamMatch[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+              if (sUrlResolved && sUrlResolved.startsWith("http")) {
+                return sUrlResolved;
+              }
+            }
+          }
+          return tryHost(hIdx + 1);
+        }).catch(function() {
+          return tryHost(hIdx + 1);
+        });
+      }
+      return tryHost(0);
+    });
+
+    // 2. Extract iframes & video players
     $("div.video iframe, div.video p iframe, iframe").each(function(_, el) {
       var src = $(el).attr("data-src") || $(el).attr("src");
-      if (src && src !== "about:blank") links.push(abs(src, pageUrl));
+      if (src && src !== "about:blank") iframes.push(abs(src, pageUrl));
     });
 
-    $("div.sources a, div.diziplus_sources a").each(function(_, el) {
-      var href = $(el).attr("href");
-      if (href && href !== "#") links.push(abs(href, pageUrl));
+    $("div.sources a, div.diziplus_sources a, [data-video], [data-url]").each(function(_, el) {
+      var href = $(el).attr("href") || $(el).attr("data-video") || $(el).attr("data-url");
+      if (href && href !== "#" && !href.startsWith("javascript:")) iframes.push(abs(href, pageUrl));
     });
 
-    return links.filter(function(v, i, a) { return a.indexOf(v) === i; });
+    return Promise.all(pvPromises).then(function(pvResults) {
+      pvResults.forEach(function(u) {
+        if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
+      });
+
+      var iframePromises = iframes.map(function(iframe) {
+        return resolveEmbed(iframe, pageUrl);
+      });
+
+      return Promise.all(iframePromises).then(function(iframeResults) {
+        iframeResults.forEach(function(arr) {
+          arr.forEach(function(u) {
+            if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
+          });
+        });
+        return streamUrls;
+      });
+    });
+  }).catch(function() {
+    return [];
   });
 }
 
 function resolveEmbed(embedUrl, referer) {
-  referer = referer || BASE_URL + "/";
+  referer = referer || BASE_DOMAINS[0] + "/";
   if (!embedUrl) return Promise.resolve([]);
 
   var lower = embedUrl.toLowerCase();
 
-  // 1. HDPlayerSystem / HDPlayer / HDMomPlayer / HDStreamable / PeaceMakerst
+  // 1. Pilavyer
+  if (lower.indexOf("pilavyer") !== -1 || lower.indexOf("play2.pilavyerplay") !== -1) {
+    return getText(embedUrl, { headers: { Referer: referer } }).then(function(html) {
+      var m = html.match(/"stream"\s*:\s*"([^"]+)"/);
+      if (m) {
+        var u = m[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+        if (u && u.startsWith("http")) return [u];
+      }
+      var m3u8 = html.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);
+      if (m3u8 && m3u8.length) return [m3u8[0]];
+      return [];
+    }).catch(function() { return []; });
+  }
+
+  // 2. HDPlayerSystem / HDPlayer / HDMomPlayer / HDStreamable / PeaceMakerst
   if (lower.indexOf("hdplayersystem") !== -1 || lower.indexOf("hdplayer") !== -1 || lower.indexOf("hdmomplayer") !== -1 || lower.indexOf("hdstreamable") !== -1 || lower.indexOf("peacemakerst") !== -1) {
     var hash = null;
     if (embedUrl.indexOf("data=") !== -1) {
@@ -252,7 +413,7 @@ function resolveEmbed(embedUrl, referer) {
     }
   }
 
-  // 2. VideoSeyred
+  // 3. VideoSeyred
   if (lower.indexOf("videoseyred") !== -1) {
     var vidId = embedUrl.split("/embed/")[1] ? embedUrl.split("/embed/")[1].split("?")[0] : null;
     if (vidId) {
@@ -274,7 +435,7 @@ function resolveEmbed(embedUrl, referer) {
     }
   }
 
-  // 3. Vidmoly
+  // 4. Vidmoly
   if (lower.indexOf("vidmoly") !== -1) {
     return getText(embedUrl, { headers: { Referer: referer } }).then(function(html) {
       var matches = html.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);
@@ -310,7 +471,7 @@ function makeStream(url, title, referer, index) {
     quality: quality,
     type: isHls ? "hls" : "mp4",
     headers: {
-      "Referer": referer || BASE_URL + "/",
+      "Referer": referer || BASE_DOMAINS[0] + "/",
       "User-Agent": USER_AGENT
     },
     provider: "dizimom"
@@ -318,8 +479,11 @@ function makeStream(url, title, referer, index) {
 }
 
 function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
-  if (mediaType !== "tv" && mediaType !== "series") return Promise.resolve([]);
-  if (!seasonNum || !episodeNum) return Promise.resolve([]);
+  var isMovie = mediaType === "movie" || mediaType === "film";
+
+  if (!isMovie && (!seasonNum || !episodeNum)) {
+    return Promise.resolve([]);
+  }
 
   return tmdbDetails(tmdbId, mediaType, seasonNum, episodeNum).then(function(info) {
     if (!info || !info.title) return [];
@@ -329,8 +493,8 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
     function tryName(i) {
       if (i >= searchNames.length) return Promise.resolve(null);
-      return searchSite(searchNames[i], info.year, seasonNum, episodeNum).then(function(res) {
-        if (res && (res.directEp || res.seriesUrl)) return res;
+      return searchSite(searchNames[i], info.year, isMovie, seasonNum, episodeNum).then(function(res) {
+        if (res && (res.directEp || res.targetUrl)) return res;
         return tryName(i + 1);
       }).catch(function() { return tryName(i + 1); });
     }
@@ -338,33 +502,31 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     return tryName(0).then(function(res) {
       if (!res) return [];
 
-      var epPromise = res.directEp
-        ? Promise.resolve(res.directEp)
-        : findEpisodeUrlOnSeriesPage(res.seriesUrl, seasonNum, episodeNum);
+      var domain = res.domain || BASE_DOMAINS[0];
+      var pageUrlPromise;
 
-      return epPromise.then(function(epUrl) {
-        if (!epUrl) return [];
+      if (isMovie) {
+        pageUrlPromise = Promise.resolve(res.targetUrl);
+      } else {
+        pageUrlPromise = res.directEp
+          ? Promise.resolve(res.directEp)
+          : findEpisodeUrlOnSeriesPage(res.targetUrl, domain, seasonNum, episodeNum);
+      }
 
-        return findIframes(epUrl).then(function(iframes) {
-          var resolvePromises = iframes.map(function(iframe) {
-            return resolveEmbed(iframe, epUrl);
-          });
+      return pageUrlPromise.then(function(pageUrl) {
+        if (!pageUrl) return [];
 
-          return Promise.all(resolvePromises).then(function(results) {
-            var streamUrls = [];
-            results.forEach(function(arr) {
-              arr.forEach(function(u) {
-                if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
-              });
-            });
-
-            var label = info.title;
+        return extractStreamsFromPage(pageUrl, domain).then(function(streamUrls) {
+          var label = info.title;
+          if (!isMovie) {
             if (info.episodeTitle) label += " - " + info.episodeTitle;
             else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+          } else if (info.year) {
+            label += " (" + info.year + ")";
+          }
 
-            return streamUrls.map(function(u, idx) {
-              return makeStream(u, label, epUrl, idx);
-            });
+          return streamUrls.map(function(u, idx) {
+            return makeStream(u, label, pageUrl, idx);
           });
         });
       });

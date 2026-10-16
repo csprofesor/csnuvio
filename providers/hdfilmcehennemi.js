@@ -2,7 +2,14 @@
 
 var cheerio = require("cheerio-without-node-native");
 
-var BASE_URL = "https://www.hdfilmcehennemi.nl";
+var BASE_DOMAINS = [
+  "https://www.hdfilmcehennemi.nl",
+  "https://www.hdfilmcehennemi.life",
+  "https://hdfilmcehennemi.ws",
+  "https://www.hdfilmcehennemi.cx",
+  "https://hdfilmcehennemi.mobi"
+];
+
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var HEADERS = {
   "User-Agent": USER_AGENT,
@@ -13,7 +20,7 @@ var HEADERS = {
 function abs(url, base) {
   if (!url) return null;
   if (url.startsWith("//")) return "https:" + url;
-  try { return new URL(url, base || BASE_URL).toString(); }
+  try { return new URL(url, base || BASE_DOMAINS[0]).toString(); }
   catch (_) { return url; }
 }
 
@@ -39,7 +46,7 @@ function postForm(url, data, referer) {
   var headers = Object.assign({}, HEADERS, {
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
-    "Referer": referer || BASE_URL + "/"
+    "Referer": referer || BASE_DOMAINS[0] + "/"
   });
   return fetch(url, {
     method: "POST",
@@ -100,75 +107,101 @@ function distance(a, b) {
   return d[a.length][b.length];
 }
 
-function searchSite(title) {
+function searchSite(title, isMovie) {
   var cleanTitle = sanitizeText(title);
   var q = encodeURIComponent(cleanTitle);
 
-  var searchApiUrl = BASE_URL + "/search?q=" + q;
+  function tryDomain(idx) {
+    if (idx >= BASE_DOMAINS.length) return Promise.resolve(null);
+    var domain = BASE_DOMAINS[idx];
 
-  return getText(searchApiUrl, {
-    headers: {
-      "X-Requested-With": "fetch",
-      "Content-Type": "application/json"
-    }
-  }).then(function(resText) {
-    try {
-      var json = JSON.parse(resText);
-      var results = json.results || [];
-      var candidates = [];
+    var searchApiUrl = domain + "/search?q=" + q;
 
-      var normTitle = normalize(cleanTitle);
-
-      results.forEach(function(itemHtml) {
-        var $ = cheerio.load(itemHtml);
-        var a = $("a").first();
-        var href = abs(a.attr("href"));
-        if (!href) return;
-
-        var name = sanitizeText($("h4, h2, strong, .title").text() || a.attr("title") || "");
-        if (!name) return;
-
-        var normName = normalize(name);
-        var dist = distance(normName, normTitle);
-
-        if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-          candidates.push({ href: href, name: name, score: dist });
-        }
-      });
-
-      candidates.sort(function(a, b) { return a.score - b.score; });
-      if (candidates.length) return candidates[0].href;
-    } catch (_) {}
-
-    return getText(BASE_URL + "/arama/?s=" + q).then(function(html) {
-      var $ = cheerio.load(html);
+    return getText(searchApiUrl, {
+      headers: {
+        "X-Requested-With": "fetch",
+        "Content-Type": "application/json",
+        "Referer": domain + "/"
+      }
+    }).then(function(resText) {
       var candidates = [];
       var normTitle = normalize(cleanTitle);
 
-      $("a.poster, a.card, div.poster, div.card, article, div.movie-box").each(function(_, el) {
-        var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
-        var href = abs(a.attr("href"));
-        if (!href) return;
+      try {
+        var json = JSON.parse(resText);
+        var results = json.results || [];
 
-        var name = sanitizeText($(el).find("h2.title, h3.title, .title, strong").text() || a.attr("title") || $(el).attr("data-title") || "");
-        if (!name) return;
+        results.forEach(function(itemHtml) {
+          var $ = cheerio.load(itemHtml);
+          var a = $("a.search-result, a.poster, a").first();
+          var href = abs(a.attr("href"), domain);
+          if (!href) return;
 
-        var normName = normalize(name);
-        var dist = distance(normName, normTitle);
+          var itemIsTv = href.indexOf("/dizi/") !== -1;
+          if (isMovie && itemIsTv) return;
+          if (!isMovie && !itemIsTv) return;
 
-        if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-          candidates.push({ href: href, name: name, score: dist });
+          var name = sanitizeText($("h4.title, .title, strong, h2").text() || a.attr("aria-label") || a.attr("title") || "");
+          if (!name) return;
+
+          var normName = normalize(name);
+          var dist = distance(normName, normTitle);
+
+          if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+            candidates.push({ href: href, name: name, score: dist, domain: domain });
+          }
+        });
+      } catch (_) {}
+
+      if (candidates.length) {
+        candidates.sort(function(a, b) { return a.score - b.score; });
+        return candidates[0];
+      }
+
+      // HTML search fallback
+      return getText(domain + "/arama/?s=" + q, { headers: { Referer: domain + "/" } }).then(function(html) {
+        var $ = cheerio.load(html);
+        var htmlCandidates = [];
+
+        $("a.poster, a.card, div.poster, div.card, article, div.movie-box, a.search-result").each(function(_, el) {
+          var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
+          var href = abs(a.attr("href"), domain);
+          if (!href) return;
+
+          var itemIsTv = href.indexOf("/dizi/") !== -1;
+          if (isMovie && itemIsTv) return;
+          if (!isMovie && !itemIsTv) return;
+
+          var name = sanitizeText($(el).find("h2.title, h3.title, .title, strong, strong.poster-title").text() || a.attr("title") || $(el).attr("data-title") || "");
+          if (!name) return;
+
+          var normName = normalize(name);
+          var dist = distance(normName, normTitle);
+
+          if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+            htmlCandidates.push({ href: href, name: name, score: dist, domain: domain });
+          }
+        });
+
+        if (htmlCandidates.length) {
+          htmlCandidates.sort(function(a, b) { return a.score - b.score; });
+          return htmlCandidates[0];
         }
-      });
 
-      candidates.sort(function(a, b) { return a.score - b.score; });
-      return candidates.length ? candidates[0].href : null;
+        return tryDomain(idx + 1);
+      }).catch(function() {
+        return tryDomain(idx + 1);
+      });
+    }).catch(function() {
+      return tryDomain(idx + 1);
     });
-  }).catch(function() { return null; });
+  }
+
+  return tryDomain(0);
 }
 
-function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
-  return getText(seriesUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function findEpisodeUrlOnSeriesPage(seriesUrl, domain, seasonNum, episodeNum) {
+  return getText(seriesUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
 
     var epPatternUrl1 = new RegExp("-" + seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
@@ -180,11 +213,11 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
 
     var match = null;
 
-    $("a[href]").each(function(_, el) {
+    $("a[href*='bolum'], div.seasons-tab-content a.mini-poster, div.seasons a[href*='bolum'], a[href]").each(function(_, el) {
       if (match) return;
       var href = abs($(el).attr("href"), seriesUrl);
       if (!href) return;
-      var txt = sanitizeText(($(el).text() || "").replace(/\s+/g, " "));
+      var txt = sanitizeText(($(el).find(".mini-poster-title").text() || $(el).text() || "").replace(/\s+/g, " "));
 
       if (epPatternUrl1.test(href) || epPatternUrl2.test(href) || epPatternTxt1.test(txt) || epPatternTxt2.test(txt)) {
         match = href;
@@ -193,12 +226,14 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, seasonNum, episodeNum) {
       }
     });
 
-    return match;
+    return match || seriesUrl;
+  }).catch(function() {
+    return seriesUrl;
   });
 }
 
-function findIframes(pageUrl) {
-  return getText(pageUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function findIframes(pageUrl, domain) {
+  return getText(pageUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
     var links = [];
 
@@ -206,24 +241,32 @@ function findIframes(pageUrl) {
       if (!rawUrl) return;
       var u = abs(rawUrl, pageUrl);
       if (!u) return;
-      if (u.match(/\.(webp|jpg|png|jpeg|svg)(\?|$)/i)) return;
-      if (u.indexOf("youtube.com") !== -1 || u.indexOf("youtu.be") !== -1) return;
+      var lower = u.toLowerCase();
+      if (lower.match(/\.(webp|jpg|png|jpeg|svg|css|js)(\?|$)/i)) return;
+      if (lower.indexOf("youtube.com") !== -1 || lower.indexOf("youtu.be") !== -1) return;
+      if (lower.indexOf("google") !== -1 || lower.indexOf("analytics") !== -1 || lower.indexOf("doubleclick") !== -1) return;
       if (links.indexOf(u) === -1) links.push(u);
     }
 
+    // 1. Direct iframes
     $("iframe").each(function(_, el) {
       addLink($(el).attr("data-src") || $(el).attr("src") || $(el).attr("data-lazy-src"));
     });
 
-    $("[data-video], [data-url], [data-src], [data-embed], [data-player], [data-file]").each(function(_, el) {
-      addLink($(el).attr("data-video") || $(el).attr("data-url") || $(el).attr("data-src") || $(el).attr("data-embed"));
+    // 2. Navigation tabs & buttons
+    $("nav.card-nav a, a.card-nav-link, button.card-nav-link, .card-video a, [data-video], [data-url]").each(function(_, el) {
+      var pUrl = $(el).attr("data-video") || $(el).attr("data-url") || $(el).attr("href");
+      if (pUrl && !pUrl.startsWith("#") && !pUrl.startsWith("javascript:")) {
+        if (pUrl.startsWith("/video/")) {
+          addLink("https://hdfilmcehennemi.mobi" + pUrl);
+        } else {
+          addLink(pUrl);
+        }
+      }
     });
 
-    $("a.card-nav-link, button.card-nav-link, .card-video a, nav.card-nav a, a[href*='/video/embed/'], a[href*='rapidrame'], a[href*='hdfilmcehennemi'], a[href*='playmix'], a[href*='closeload']").each(function(_, el) {
-      addLink($(el).attr("href") || $(el).attr("data-video") || $(el).attr("data-url"));
-    });
-
-    var matches = html.match(/https?:\/\/[^\s'"\\]+?\/(?:video\/embed|embed|v|player)[^\s'"\\]*/gi);
+    // 3. Regex matches
+    var matches = html.match(/https?:\/\/[^\s'"\\]+?\/(?:video\/embed|embed|v|player|video)[^\s'"\\]*/gi);
     if (matches) {
       matches.forEach(function(m) { addLink(m); });
     }
@@ -233,40 +276,59 @@ function findIframes(pageUrl) {
 }
 
 function resolveEmbed(embedUrl, referer) {
-  referer = referer || BASE_URL + "/";
+  referer = referer || BASE_DOMAINS[0] + "/";
   if (!embedUrl) return Promise.resolve([]);
 
   var originMatch = embedUrl.match(/https?:\/\/[^\/]+/);
-  var origin = originMatch ? originMatch[0] : BASE_URL;
+  var origin = originMatch ? originMatch[0] : BASE_DOMAINS[0];
 
   return getText(embedUrl, { headers: { Referer: referer } }).then(function(html) {
+    var urls = [];
+
+    // Direct m3u8 or txt stream links (HLS)
+    var m3u8Matches = html.match(/https?:\/\/[^\s"'<>]+\.(?:m3u8|txt)[^\s"'<>]*/gi);
+    if (m3u8Matches) {
+      m3u8Matches.forEach(function(u) {
+        u = u.replace(/\\\//g, '/');
+        if (u.indexOf("filmakinesi") === -1 && urls.indexOf(u) === -1) {
+          urls.push(u);
+        }
+      });
+    }
+
+    // Hash based video resolver
     var hashMatch = html.match(/"hash"\s*:\s*"([a-zA-Z0-9]{32})"/i) || html.match(/hash\s*:\s*['"]([a-zA-Z0-9]{32})['"]/i);
     var hash = hashMatch ? hashMatch[1] : null;
 
     if (hash) {
       var cleanEmbed = embedUrl.split("?")[0];
-      var postUrls = [];
-      postUrls.push(cleanEmbed + "?do=getVideo");
-      postUrls.push(origin + "/video/ah/");
+      var postUrls = [
+        cleanEmbed + "?do=getVideo",
+        origin + "/video/ah/"
+      ];
 
       function tryPost(idx) {
-        if (idx >= postUrls.length) return Promise.resolve([]);
+        if (idx >= postUrls.length) return Promise.resolve(urls);
         return postForm(postUrls[idx], { hash: hash }, embedUrl).then(function(resText) {
-          var urls = [];
-          var jsonMatches = resText.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/g);
-          if (jsonMatches) {
-            jsonMatches.forEach(function(m) {
+          var postMatches = resText.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/g);
+          if (postMatches) {
+            postMatches.forEach(function(m) {
               var uMatch = m.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/);
               if (uMatch) {
                 var u = uMatch[1].replace(/\\\//g, '/');
-                if (urls.indexOf(u) === -1) urls.push(u);
+                if (u.indexOf("filmakinesi") === -1 && urls.indexOf(u) === -1) urls.push(u);
               }
             });
           }
-          if (!urls.length) {
-            var m3u8Matches = resText.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);
-            if (m3u8Matches) urls = m3u8Matches;
+
+          var mMatches = resText.match(/https?:\/\/[^\s"'<>]+\.(?:m3u8|txt)[^\s"'<>]*/gi);
+          if (mMatches) {
+            mMatches.forEach(function(u) {
+              u = u.replace(/\\\//g, '/');
+              if (u.indexOf("filmakinesi") === -1 && urls.indexOf(u) === -1) urls.push(u);
+            });
           }
+
           if (urls.length) return urls;
           return tryPost(idx + 1);
         }).catch(function() { return tryPost(idx + 1); });
@@ -275,13 +337,21 @@ function resolveEmbed(embedUrl, referer) {
       return tryPost(0);
     }
 
-    var m3u8Matches = html.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);
-    if (m3u8Matches && m3u8Matches.length) return [m3u8Matches[0]];
+    // Fallback: check file: "..." or mp4
+    var fileMatch = html.match(/file\s*:\s*["']([^"']+)["']/i);
+    if (fileMatch && fileMatch[1].indexOf("filmakinesi") === -1) {
+      var f = fileMatch[1].replace(/\\\//g, '/');
+      if (urls.indexOf(f) === -1) urls.push(f);
+    }
 
     var mp4Matches = html.match(/https?:\/\/[^"'`\s]+\.mp4[^\s"'`]*/gi);
-    if (mp4Matches && mp4Matches.length) return [mp4Matches[0]];
+    if (mp4Matches) {
+      mp4Matches.forEach(function(u) {
+        if (urls.indexOf(u) === -1) urls.push(u);
+      });
+    }
 
-    return [];
+    return urls;
   }).catch(function() { return []; });
 }
 
@@ -292,7 +362,7 @@ function makeStream(url, title, referer, index) {
   if (q) quality = q[0];
   else if (lower.indexOf("4k") !== -1) quality = "4K";
 
-  var isHls = lower.indexOf(".m3u8") !== -1;
+  var isHls = lower.indexOf(".m3u8") !== -1 || lower.indexOf(".txt") !== -1 || lower.indexOf("/hls/") !== -1;
   return {
     name: "HDFilmCehennemi",
     title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
@@ -300,7 +370,7 @@ function makeStream(url, title, referer, index) {
     quality: quality,
     type: isHls ? "hls" : "mp4",
     headers: {
-      "Referer": referer || BASE_URL + "/",
+      "Referer": referer || BASE_DOMAINS[0] + "/",
       "User-Agent": USER_AGENT
     },
     provider: "hdfilmcehennemi"
@@ -308,6 +378,12 @@ function makeStream(url, title, referer, index) {
 }
 
 function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  var isMovie = mediaType === "movie" || mediaType === "film";
+
+  if (!isMovie && (!seasonNum || !episodeNum)) {
+    return Promise.resolve([]);
+  }
+
   return tmdbDetails(tmdbId, mediaType, seasonNum, episodeNum).then(function(info) {
     if (!info || !info.title) return [];
 
@@ -316,23 +392,24 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
     function tryName(i) {
       if (i >= searchNames.length) return Promise.resolve(null);
-      return searchSite(searchNames[i]).then(function(url) {
-        if (url) return url;
+      return searchSite(searchNames[i], isMovie).then(function(res) {
+        if (res && res.href) return res;
         return tryName(i + 1);
       }).catch(function() { return tryName(i + 1); });
     }
 
-    return tryName(0).then(function(itemUrl) {
-      if (!itemUrl) return [];
+    return tryName(0).then(function(searchResult) {
+      if (!searchResult || !searchResult.href) return [];
 
-      var targetPromise = (mediaType === "tv" || mediaType === "series") && seasonNum && episodeNum
-        ? findEpisodeUrlOnSeriesPage(itemUrl, seasonNum, episodeNum)
-        : Promise.resolve(itemUrl);
+      var domain = searchResult.domain || BASE_DOMAINS[0];
+      var targetPromise = isMovie
+        ? Promise.resolve(searchResult.href)
+        : findEpisodeUrlOnSeriesPage(searchResult.href, domain, seasonNum, episodeNum);
 
       return targetPromise.then(function(pageUrl) {
-        if (!pageUrl) pageUrl = itemUrl;
+        if (!pageUrl) pageUrl = searchResult.href;
 
-        return findIframes(pageUrl).then(function(iframes) {
+        return findIframes(pageUrl, domain).then(function(iframes) {
           var resolvePromises = iframes.map(function(iframe) {
             return resolveEmbed(iframe, pageUrl);
           });
@@ -346,8 +423,12 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
             });
 
             var label = info.title;
-            if (info.episodeTitle) label += " - " + info.episodeTitle;
-            else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+            if (!isMovie) {
+              if (info.episodeTitle) label += " - " + info.episodeTitle;
+              else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+            } else if (info.year) {
+              label += " (" + info.year + ")";
+            }
 
             return streamUrls.map(function(u, idx) {
               return makeStream(u, label, pageUrl, idx);
