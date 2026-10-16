@@ -166,7 +166,7 @@ async function extractStreams(playerUrl, pageUrl) {
                       html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
 
     if (streamMatch && streamMatch[1]) {
-      var directUrl = streamMatch[1].replace(/\\/g, "");
+      var directUrl = streamMatch[1].replace(/\\u0026/g, "&").replace(/u0026/g, "&").replace(/\\\//g, "/").replace(/\\/g, "");
       var isHls = directUrl.indexOf(".m3u8") !== -1 || directUrl.indexOf("stream.php") !== -1;
       streams.push(makeStream(directUrl, "DiziGom Player", "1080p", isHls, {
         "User-Agent": USER_AGENT,

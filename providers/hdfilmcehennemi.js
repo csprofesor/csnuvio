@@ -3,6 +3,7 @@
 var cheerio = require("cheerio-without-node-native");
 
 var BASE_DOMAINS = [
+  "https://hdfilmcehennemiv4.com",
   "https://www.hdfilmcehennemi.nl",
   "https://hdfilmcehennemi.ws"
 ];
@@ -104,6 +105,59 @@ function distance(a, b) {
   return d[a.length][b.length];
 }
 
+async function webCryptoDecrypt(rawJsonText) {
+  var passphrase = "3hPn4uCjTVtfYWcjIcoJQ4cL1WWk1qxXI39egLYOmNv6IblA7eKJz68uU3eLzux1biZLCms0quEjTYniGv5z1JcKbNIsDQFSeIZOBZJz4is6pD7UyWDggWWzTLBQbHcQFpBQdClnuQaMNUHtLHTpzCvZy33p6I7wFBvL4fnXBYH84aUIyWGTRvM2G5cfoNf4705tO2kv";
+
+  var json = null;
+  try { json = JSON.parse(rawJsonText); } catch (_) {}
+  var ct = (json && json.ciphertext) ? json.ciphertext : null;
+  var iv = (json && json.iv) ? json.iv : null;
+  var salt = (json && json.salt) ? json.salt : null;
+
+  if (!ct || !iv || !salt) return null;
+
+  function hexToBuf(hex) {
+    var bytes = new Uint8Array(hex.length / 2);
+    for (var i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+    }
+    return bytes;
+  }
+
+  function b64ToBuf(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  try {
+    var saltBuf = hexToBuf(salt);
+    var ivBuf = hexToBuf(iv);
+    var ctBuf = b64ToBuf(ct);
+
+    var enc = new TextEncoder();
+    var passKey = await globalThis.crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    var aesKey = await globalThis.crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: saltBuf, iterations: 999, hash: "SHA-512" },
+      passKey,
+      { name: "AES-CBC", length: 256 },
+      false,
+      ["decrypt"]
+    );
+
+    var decrypted = await globalThis.crypto.subtle.decrypt({ name: "AES-CBC", iv: ivBuf }, aesKey, ctBuf);
+    var decStr = new TextDecoder().decode(decrypted).replace(/\\\//g, '/');
+    if (decStr.startsWith("//")) decStr = "https:" + decStr;
+    else if (!decStr.startsWith("http")) decStr = "https://" + decStr;
+    return decStr;
+  } catch (e) {
+    return null;
+  }
+}
+
 function searchSite(title, isMovie) {
   var cleanTitle = sanitizeText(title);
   var q = encodeURIComponent(cleanTitle);
@@ -112,83 +166,68 @@ function searchSite(title, isMovie) {
     if (idx >= BASE_DOMAINS.length) return Promise.resolve(null);
     var domain = BASE_DOMAINS[idx];
 
-    var searchApiUrl = domain + "/search?q=" + q;
+    // Try V4 POST search first
+    return getText(domain + "/", { headers: { Referer: domain + "/" } }).then(function(homeHtml) {
+      var $h = cheerio.load(homeHtml);
+      var cKey = $h("input[name='cKey']").val();
+      var cValue = $h("input[name='cValue']").val();
 
-    return getText(searchApiUrl, {
-      headers: {
-        "X-Requested-With": "fetch",
-        "Content-Type": "application/json",
-        "Referer": domain + "/"
+      if (cKey && cValue) {
+        return postForm(domain + "/bg/searchcontent", {
+          cKey: cKey,
+          cValue: cValue,
+          type: "hepsi",
+          searchterm: cleanTitle
+        }, domain + "/").then(function(resText) {
+          try {
+            var json = JSON.parse(resText);
+            var results = (json && json.data && json.data.result) ? json.data.result : [];
+            var candidates = [];
+            var normTitle = normalize(cleanTitle);
+
+            results.forEach(function(item) {
+              if (!item.used_slug) return;
+              var href = domain + "/" + item.used_slug;
+              var name = item.object_name || item.object_alternative_name || "";
+              var normName = normalize(name);
+              var dist = distance(normName, normTitle);
+              candidates.push({ href: href, name: name, score: dist, domain: domain });
+            });
+
+            if (candidates.length) {
+              candidates.sort(function(a, b) { return a.score - b.score; });
+              return candidates[0];
+            }
+          } catch (_) {}
+          return null;
+        }).catch(function() { return null; });
       }
-    }).then(function(resText) {
-      var candidates = [];
-      var normTitle = normalize(cleanTitle);
 
-      try {
-        var json = JSON.parse(resText);
-        var results = json.results || [];
-
-        results.forEach(function(itemHtml) {
-          var $ = cheerio.load(itemHtml);
-          var a = $("a.search-result, a.poster, a").first();
-          var href = abs(a.attr("href"), domain);
-          if (!href) return;
-
-          var itemIsTv = href.indexOf("/dizi/") !== -1;
-          if (isMovie && itemIsTv) return;
-          if (!isMovie && !itemIsTv) return;
-
-          var name = sanitizeText($("h4.title, .title, strong, h2").text() || a.attr("aria-label") || a.attr("title") || "");
-          if (!name) return;
-
-          var normName = normalize(name);
-          var dist = distance(normName, normTitle);
-
-          if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+      // Classic API fallback
+      return getText(domain + "/search?q=" + q, {
+        headers: { "X-Requested-With": "fetch", "Content-Type": "application/json", "Referer": domain + "/" }
+      }).then(function(resText) {
+        var candidates = [];
+        var normTitle = normalize(cleanTitle);
+        try {
+          var json = JSON.parse(resText);
+          var results = json.results || [];
+          results.forEach(function(itemHtml) {
+            var $ = cheerio.load(itemHtml);
+            var a = $("a.search-result, a.poster, a").first();
+            var href = abs(a.attr("href"), domain);
+            if (!href) return;
+            var name = sanitizeText($("h4.title, .title, strong, h2").text() || a.attr("title") || "");
+            var dist = distance(normalize(name), normTitle);
             candidates.push({ href: href, name: name, score: dist, domain: domain });
-          }
-        });
-      } catch (_) {}
-
-      if (candidates.length) {
-        candidates.sort(function(a, b) { return a.score - b.score; });
-        return candidates[0];
-      }
-
-      // HTML search fallback
-      return getText(domain + "/arama/?s=" + q, { headers: { Referer: domain + "/" } }).then(function(html) {
-        var $ = cheerio.load(html);
-        var htmlCandidates = [];
-
-        $("a.poster, a.card, div.poster, div.card, article, div.movie-box, a.search-result").each(function(_, el) {
-          var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
-          var href = abs(a.attr("href"), domain);
-          if (!href) return;
-
-          var itemIsTv = href.indexOf("/dizi/") !== -1;
-          if (isMovie && itemIsTv) return;
-          if (!isMovie && !itemIsTv) return;
-
-          var name = sanitizeText($(el).find("h2.title, h3.title, .title, strong, strong.poster-title").text() || a.attr("title") || $(el).attr("data-title") || "");
-          if (!name) return;
-
-          var normName = normalize(name);
-          var dist = distance(normName, normTitle);
-
-          if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-            htmlCandidates.push({ href: href, name: name, score: dist, domain: domain });
-          }
-        });
-
-        if (htmlCandidates.length) {
-          htmlCandidates.sort(function(a, b) { return a.score - b.score; });
-          return htmlCandidates[0];
+          });
+        } catch (_) {}
+        if (candidates.length) {
+          candidates.sort(function(a, b) { return a.score - b.score; });
+          return candidates[0];
         }
-
         return tryDomain(idx + 1);
-      }).catch(function() {
-        return tryDomain(idx + 1);
-      });
+      }).catch(function() { return tryDomain(idx + 1); });
     }).catch(function() {
       return tryDomain(idx + 1);
     });
@@ -230,126 +269,36 @@ function findEpisodeUrlOnSeriesPage(seriesUrl, domain, seasonNum, episodeNum) {
 }
 
 function findIframes(pageUrl, domain) {
-  return getText(pageUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
+  return getText(pageUrl, { headers: { Referer: domain + "/" } }).then(async function(html) {
     var $ = cheerio.load(html);
     var links = [];
 
-    function addLink(rawUrl) {
-      if (!rawUrl) return;
-      var u = abs(rawUrl, pageUrl);
-      if (!u) return;
-      var lower = u.toLowerCase();
-      if (lower.match(/\.(webp|jpg|png|jpeg|svg|css|js)(\?|$)/i)) return;
-      if (lower.indexOf("youtube.com") !== -1 || lower.indexOf("youtu.be") !== -1) return;
-      if (lower.indexOf("google") !== -1 || lower.indexOf("analytics") !== -1 || lower.indexOf("doubleclick") !== -1) return;
-      if (links.indexOf(u) === -1) links.push(u);
+    // 1. Decrypt data-rm-k
+    var encDiv = $("div[data-rm-k='true']").first();
+    if (encDiv.length) {
+      var dec = await webCryptoDecrypt(encDiv.text());
+      if (dec && links.indexOf(dec) === -1) links.push(dec);
     }
 
-    // 1. Direct iframes
+    // 2. Direct iframes
     $("iframe").each(function(_, el) {
-      addLink($(el).attr("data-src") || $(el).attr("src") || $(el).attr("data-lazy-src"));
-    });
-
-    // 2. Navigation tabs & buttons
-    $("nav.card-nav a, a.card-nav-link, button.card-nav-link, .card-video a, [data-video], [data-url]").each(function(_, el) {
-      var pUrl = $(el).attr("data-video") || $(el).attr("data-url") || $(el).attr("href");
-      if (pUrl && !pUrl.startsWith("#") && !pUrl.startsWith("javascript:")) {
-        if (pUrl.startsWith("/video/")) {
-          addLink("https://hdfilmcehennemi.mobi" + pUrl);
-        } else {
-          addLink(pUrl);
-        }
+      var src = $(el).attr("data-src") || $(el).attr("src");
+      if (src) {
+        var u = abs(src, pageUrl);
+        if (u && links.indexOf(u) === -1) links.push(u);
       }
     });
 
-    // 3. Regex matches
-    var matches = html.match(/https?:\/\/[^\s'"\\]+?\/(?:video\/embed|embed|v|player|video)[^\s'"\\]*/gi);
-    if (matches) {
-      matches.forEach(function(m) { addLink(m); });
-    }
+    // 3. Player tabs
+    $("a[href*='player='], button[data-player], nav.card-nav a, a.card-nav-link").each(function(_, el) {
+      var pUrl = abs($(el).attr("href") || $(el).attr("data-video") || $(el).attr("data-url"), pageUrl);
+      if (pUrl && links.indexOf(pUrl) === -1 && !pUrl.startsWith("#")) {
+        links.push(pUrl);
+      }
+    });
 
     return links;
   });
-}
-
-function resolveEmbed(embedUrl, referer) {
-  referer = referer || BASE_DOMAINS[0] + "/";
-  if (!embedUrl) return Promise.resolve([]);
-
-  var originMatch = embedUrl.match(/https?:\/\/[^\/]+/);
-  var origin = originMatch ? originMatch[0] : BASE_DOMAINS[0];
-
-  return getText(embedUrl, { headers: { Referer: referer } }).then(function(html) {
-    var urls = [];
-
-    // Direct m3u8 or txt stream links (HLS)
-    var m3u8Matches = html.match(/https?:\/\/[^\s"'<>]+\.(?:m3u8|txt)[^\s"'<>]*/gi);
-    if (m3u8Matches) {
-      m3u8Matches.forEach(function(u) {
-        u = u.replace(/\\\//g, '/');
-        if (u.indexOf("filmakinesi") === -1 && urls.indexOf(u) === -1) {
-          urls.push(u);
-        }
-      });
-    }
-
-    // Hash based video resolver
-    var hashMatch = html.match(/"hash"\s*:\s*"([a-zA-Z0-9]{32})"/i) || html.match(/hash\s*:\s*['"]([a-zA-Z0-9]{32})['"]/i);
-    var hash = hashMatch ? hashMatch[1] : null;
-
-    if (hash) {
-      var cleanEmbed = embedUrl.split("?")[0];
-      var postUrls = [
-        cleanEmbed + "?do=getVideo",
-        origin + "/video/ah/"
-      ];
-
-      function tryPost(idx) {
-        if (idx >= postUrls.length) return Promise.resolve(urls);
-        return postForm(postUrls[idx], { hash: hash }, embedUrl).then(function(resText) {
-          var postMatches = resText.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/g);
-          if (postMatches) {
-            postMatches.forEach(function(m) {
-              var uMatch = m.match(/"(?:file|url|hls|source|securedLink)"\s*:\s*"([^"]+)"/);
-              if (uMatch) {
-                var u = uMatch[1].replace(/\\\//g, '/');
-                if (u.indexOf("filmakinesi") === -1 && urls.indexOf(u) === -1) urls.push(u);
-              }
-            });
-          }
-
-          var mMatches = resText.match(/https?:\/\/[^\s"'<>]+\.(?:m3u8|txt)[^\s"'<>]*/gi);
-          if (mMatches) {
-            mMatches.forEach(function(u) {
-              u = u.replace(/\\\//g, '/');
-              if (u.indexOf("filmakinesi") === -1 && urls.indexOf(u) === -1) urls.push(u);
-            });
-          }
-
-          if (urls.length) return urls;
-          return tryPost(idx + 1);
-        }).catch(function() { return tryPost(idx + 1); });
-      }
-
-      return tryPost(0);
-    }
-
-    // Fallback: check file: "..." or mp4
-    var fileMatch = html.match(/file\s*:\s*["']([^"']+)["']/i);
-    if (fileMatch && fileMatch[1].indexOf("filmakinesi") === -1) {
-      var f = fileMatch[1].replace(/\\\//g, '/');
-      if (urls.indexOf(f) === -1) urls.push(f);
-    }
-
-    var mp4Matches = html.match(/https?:\/\/[^"'`\s]+\.mp4[^\s"'`]*/gi);
-    if (mp4Matches) {
-      mp4Matches.forEach(function(u) {
-        if (urls.indexOf(u) === -1) urls.push(u);
-      });
-    }
-
-    return urls;
-  }).catch(function() { return []; });
 }
 
 function makeStream(url, title, referer, index) {
@@ -406,30 +355,36 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
       return targetPromise.then(function(pageUrl) {
         if (!pageUrl) pageUrl = searchResult.href;
 
-        return findIframes(pageUrl, domain).then(function(iframes) {
-          var resolvePromises = iframes.map(function(iframe) {
-            return resolveEmbed(iframe, pageUrl);
-          });
+        return findIframes(pageUrl, domain).then(async function(iframes) {
+          var streamUrls = [];
 
-          return Promise.all(resolvePromises).then(function(results) {
-            var streamUrls = [];
-            results.forEach(function(arr) {
-              arr.forEach(function(u) {
-                if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
-              });
-            });
-
-            var label = info.title;
-            if (!isMovie) {
-              if (info.episodeTitle) label += " - " + info.episodeTitle;
-              else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
-            } else if (info.year) {
-              label += " (" + info.year + ")";
+          for (var i = 0; i < iframes.length; i++) {
+            var iframe = iframes[i];
+            if (iframe.indexOf("player=") !== -1) {
+              try {
+                const pHtml = await getText(iframe, { headers: { Referer: pageUrl } });
+                const $p = cheerio.load(pHtml);
+                const enc = $p("div[data-rm-k='true']").first();
+                if (enc.length) {
+                  const dec = await webCryptoDecrypt(enc.text());
+                  if (dec && streamUrls.indexOf(dec) === -1) streamUrls.push(dec);
+                }
+              } catch (_) {}
+            } else if (streamUrls.indexOf(iframe) === -1) {
+              streamUrls.push(iframe);
             }
+          }
 
-            return streamUrls.map(function(u, idx) {
-              return makeStream(u, label, pageUrl, idx);
-            });
+          var label = info.title;
+          if (!isMovie) {
+            if (info.episodeTitle) label += " - " + info.episodeTitle;
+            else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
+          } else if (info.year) {
+            label += " (" + info.year + ")";
+          }
+
+          return streamUrls.map(function(u, idx) {
+            return makeStream(u, label, pageUrl, idx);
           });
         });
       });

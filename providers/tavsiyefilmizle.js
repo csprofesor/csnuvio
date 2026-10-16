@@ -80,19 +80,22 @@ function searchSite(title) {
     var candidates = [];
     var normTitle = normalize(cleanTitle);
 
-    $("div.movie-preview, article.post, div.post").each(function(_, el) {
-      var a = $(el).find("a[href*='/filmler/'], a[href*='/filmler10/'], a").first();
+    $("article, div.movie, div.item, a[href*='-izle']").each(function(_, el) {
+      var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
       var href = abs(a.attr("href"));
-      if (!href) return;
+      if (!href || href === BASE_URL || href === BASE_URL + "/" || href.indexOf("/category/") !== -1) return;
 
-      var name = sanitizeText(a.find("img").attr("alt") || $(el).find("span.movie-title, .title, h2, h3").text() || a.attr("title") || "");
-      name = name.replace(/\s*(film(i)?\s+)?izle\s*$/i, "").trim();
+      var name = sanitizeText(a.attr("title") || $(el).find("h2, h3, .title").text() || a.text() || "");
+      name = name.replace(/\s*(?:İzle|izle|HD)$/gi, "").trim();
       if (!name) return;
 
       var normName = normalize(name);
       var dist = distance(normName, normTitle);
+
       if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-        candidates.push({ href: href, name: name, score: dist });
+        if (!candidates.some(function(c) { return c.href === href; })) {
+          candidates.push({ href: href, name: name, score: dist });
+        }
       }
     });
 
@@ -101,26 +104,52 @@ function searchSite(title) {
   }).catch(function() { return null; });
 }
 
-function resolvePlayerHtml(iframeUrl, referer) {
-  return getText(iframeUrl, { headers: { Referer: referer || BASE_URL + "/" } }).then(function(html) {
-    var urls = [];
+function findIframes(pageUrl) {
+  return getText(pageUrl, { headers: { Referer: pageUrl } }).then(function(html) {
+    var $ = cheerio.load(html);
+    var links = [];
 
-    var locMatch = html.match(/"video_location"\s*:\s*"([^"]+)"/i);
-    if (locMatch) {
-      var loc = locMatch[1].replace(/\\\//g, "/");
-      if (urls.indexOf(loc) === -1) urls.push(loc);
+    function addLink(rawUrl) {
+      if (!rawUrl || rawUrl === "about:blank") return;
+      var u = abs(rawUrl, pageUrl);
+      if (!u || u.indexOf("youtube.com") !== -1 || u.indexOf("youtu.be") !== -1) return;
+      if (links.indexOf(u) === -1) links.push(u);
     }
 
-    var fileMatches = html.match(/file\s*:\s*["']([^"']+)["']/g);
-    if (fileMatches) {
-      fileMatches.forEach(function(m) {
-        var uMatch = m.match(/file\s*:\s*["']([^"']+)["']/);
-        if (uMatch) {
-          var u = uMatch[1].replace(/\\\//g, "/");
-          if (u.startsWith("//")) u = "https:" + u;
-          if (urls.indexOf(u) === -1) urls.push(u);
-        }
-      });
+    $("iframe").each(function(_, el) {
+      addLink($(el).attr("data-litespeed-src") || $(el).attr("data-src") || $(el).attr("src") || $(el).attr("data-lazy-src"));
+    });
+
+    $("[data-video], [data-url], [data-src], [data-litespeed-src]").each(function(_, el) {
+      addLink($(el).attr("data-litespeed-src") || $(el).attr("data-video") || $(el).attr("data-url") || $(el).attr("data-src"));
+    });
+
+    return links;
+  }).catch(function() { return []; });
+}
+
+function decryptVidrameXor(arr, key) {
+  var o = '', i = 0;
+  for (; i < arr.length; i++) {
+    o += String.fromCharCode(arr[i] ^ key.charCodeAt(i % key.length) ^ ((i * 17 + 13) & 255));
+  }
+  return o;
+}
+
+function resolveEmbed(embedUrl, referer) {
+  if (!embedUrl) return Promise.resolve([]);
+
+  return getText(embedUrl, { headers: { Referer: referer || BASE_URL + "/" } }).then(function(html) {
+    var urls = [];
+
+    var fileFnMatch = html.match(/file\s*:\s*\(function\(d,k\)\{[\s\S]*?\}\)\s*\(\s*(\[[^\]]+\])\s*,\s*['"]([^'"]+)['"]\s*\)/);
+    if (fileFnMatch) {
+      try {
+        var arrData = JSON.parse(fileFnMatch[1]);
+        var key = fileFnMatch[2];
+        var decUrl = decryptVidrameXor(arrData, key);
+        if (decUrl && decUrl.startsWith("http")) urls.push(decUrl);
+      } catch (_) {}
     }
 
     var m3u8Matches = html.match(/https?:\/\/[^"'`\s\\]+\.m3u8[^\s"'`\\]*/gi);
@@ -143,47 +172,14 @@ function resolvePlayerHtml(iframeUrl, referer) {
   }).catch(function() { return []; });
 }
 
-function resolveTavsiyeFilmSources(pageUrl) {
-  return getText(pageUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
-    var $ = cheerio.load(html);
-    var iframes = [];
-
-    $("iframe").each(function(_, el) {
-      var src = abs($(el).attr("data-litespeed-src") || $(el).attr("data-src") || $(el).attr("src"), pageUrl);
-      if (src && src.indexOf("youtube.com") === -1 && src.indexOf("youtu.be") === -1) {
-        if (iframes.indexOf(src) === -1) iframes.push(src);
-      }
-    });
-
-    var resolvePromises = iframes.map(function(u) {
-      return resolvePlayerHtml(u, pageUrl);
-    });
-
-    return Promise.all(resolvePromises).then(function(resultsArray) {
-      var all = [];
-      resultsArray.forEach(function(arr) {
-        arr.forEach(function(u) {
-          if (u && all.indexOf(u) === -1) all.push(u);
-        });
-      });
-      return all;
-    });
-  }).catch(function() { return []; });
-}
-
-function makeStream(url, title, index) {
+function makeStream(url, title, quality, label) {
   var lower = url.toLowerCase();
-  var quality = "HD";
-  var q = lower.match(/(?:2160|1440|1080|720|576|480|360)p/);
-  if (q) quality = q[0];
-  else if (lower.indexOf("4k") !== -1) quality = "4K";
-
   var isHls = lower.indexOf(".m3u8") !== -1;
   return {
-    name: "TavsiyeFilmIzle",
-    title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
+    name: "TavsiyeFilmİzle",
+    title: label || title,
     url: url,
-    quality: quality,
+    quality: quality || "1080p",
     type: isHls ? "hls" : "mp4",
     headers: {
       "Referer": BASE_URL + "/",
@@ -194,7 +190,9 @@ function makeStream(url, title, index) {
 }
 
 function getStreams(tmdbId, mediaType) {
-  if (mediaType === "tv" || mediaType === "series") return Promise.resolve([]);
+  if (mediaType === "tv" || mediaType === "series") {
+    return Promise.resolve([]);
+  }
 
   return tmdbDetails(tmdbId, mediaType).then(function(info) {
     if (!info || !info.title) return [];
@@ -213,10 +211,23 @@ function getStreams(tmdbId, mediaType) {
     return trySearch(0).then(function(movieUrl) {
       if (!movieUrl) return [];
 
-      return resolveTavsiyeFilmSources(movieUrl).then(function(streamUrls) {
-        var label = info.title + (info.year ? " (" + info.year + ")" : "");
-        return streamUrls.map(function(u, idx) {
-          return makeStream(u, label, idx);
+      return findIframes(movieUrl).then(function(iframes) {
+        var resolvePromises = iframes.map(function(iframe) {
+          return resolveEmbed(iframe, movieUrl);
+        });
+
+        return Promise.all(resolvePromises).then(function(results) {
+          var streamUrls = [];
+          results.forEach(function(arr) {
+            arr.forEach(function(u) {
+              if (u && streamUrls.indexOf(u) === -1) streamUrls.push(u);
+            });
+          });
+
+          var baseTitle = info.title + (info.year ? " (" + info.year + ")" : "");
+          return streamUrls.map(function(u, idx) {
+            return makeStream(u, baseTitle, "1080p", baseTitle + (idx > 0 ? " • Kaynak " + (idx + 1) : ""));
+          });
         });
       });
     });

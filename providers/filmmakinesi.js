@@ -2,8 +2,8 @@
 
 var cheerio = require("cheerio-without-node-native");
 
-var BASE_URL = "https://filmmakinesi.to";
-var FALLBACK_URL = "https://filmmakinesi.de";
+var BASE_URL = "https://filmmakinesi.co";
+var FALLBACK_URL = "https://filmmakinesi.to";
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var HEADERS = {
   "User-Agent": USER_AGENT,
@@ -86,25 +86,33 @@ function searchSite(title) {
   var q = encodeURIComponent(cleanTitle);
 
   function trySearchOn(domain) {
-    var searchUrl = domain + "/arama/?s=" + q;
+    var searchUrl = domain + "/?s=" + q;
     return getText(searchUrl, { headers: { Referer: domain + "/" } }).then(function(html) {
       var $ = cheerio.load(html);
       var candidates = [];
       var normTitle = normalize(cleanTitle);
 
-      $("a.item, div.item-relative a.item, div.movie-box a, .item-movie a, article a").each(function(_, el) {
+      $(".poster, article, div.movie-box, div.item").each(function(_, el) {
         var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
         var href = abs(a.attr("href"), domain);
-        if (!href) return;
+        if (!href || href === domain || href === domain + "/" || href.indexOf("/category/") !== -1 || href.indexOf("/yil/") !== -1 || href.indexOf("/login/") !== -1 || href.indexOf("/film-robotu/") !== -1 || href.indexOf("/film-arsivi/") !== -1 || href.indexOf("/dizi-film-istek/") !== -1) return;
 
-        var name = sanitizeText(a.attr("data-title") || a.attr("title") || a.find(".title, .item-title, h4, h3, .movie-title").text() || "");
-        if (!name) return;
+        if (href.startsWith(domain)) {
+          var img = $(el).is("img") ? $(el) : $(el).find("img").first();
+          var name = sanitizeText(img.attr("alt") || a.attr("title") || a.text() || "");
+          if (!name) {
+            var parts = href.split("/").filter(Boolean);
+            name = (parts.pop() || "").replace(/-/g, " ");
+          }
+          name = name.split("\n")[0].trim();
+          var normName = normalize(name);
+          var dist = distance(normName, normTitle);
 
-        var normName = normalize(name);
-        var dist = distance(normName, normTitle);
-
-        if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-          candidates.push({ href: href, name: name, score: dist });
+          if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
+            if (!candidates.some(function(c) { return c.href === href; })) {
+              candidates.push({ href: href, name: name, score: dist });
+            }
+          }
         }
       });
 
@@ -164,56 +172,42 @@ function findIframes(pageUrl) {
   }).catch(function() { return []; });
 }
 
-function safeBase64Decode(str) {
-  try {
-    return atob(str);
-  } catch (_) {
-    return str;
-  }
-}
+function resolveOynatEmbed(embedUrl) {
+  return getText(embedUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+    var eauthMatch = html.match(/window\.__ULTRA_EAUTH\s*=\s*"([^"]+)"/);
+    var eauth = eauthMatch ? eauthMatch[1] : null;
 
-function decryptCloseLoad(html) {
-  try {
-    var regexKey = /var\s+[a-zA-Z0-9_]+\s*=\s*["']([a-zA-Z0-9]{15,35})["']/g;
-    var regexOps = /var\s+[a-zA-Z0-9_]+\s*=\s*["']([a-zA-Z]{2,8})["']/g;
-    var regexArr = /\(\[((?:["'][^"']+["'],?\s*)+)\]\)/g;
+    var parts = embedUrl.split("/embed/");
+    if (!parts || parts.length < 2) return [];
+    var embedId = parts[1].split("?")[0];
+    if (!embedId || !eauth) return [];
 
-    var keyMatch = regexKey.exec(html);
-    var opsMatch = regexOps.exec(html);
-    var arrMatch = regexArr.exec(html);
+    var origin = parts[0];
+    var apiUrl = origin + "/api/video-qualities/" + embedId + "?eauth=" + encodeURIComponent(eauth);
 
-    if (keyMatch && opsMatch && arrMatch) {
-      var ops = opsMatch[1];
-      var rawArrStr = arrMatch[1];
-      var arrList = rawArrStr.split(",").map(function(s) {
-        return s.trim().replace(/['"]/g, "").replace(/\\\//g, "/");
-      });
-      var str = arrList.join("");
-
-      for (var i = ops.length - 1; i >= 0; i--) {
-        var op = ops[i];
-        if (op === "v" || op === "V") {
-          str = str.split("").reverse().join("");
-        } else if (op === "b" || op === "B") {
-          str = safeBase64Decode(str);
-        }
+    return getText(apiUrl, { headers: { Referer: embedUrl } }).then(function(jsonText) {
+      var data = JSON.parse(jsonText);
+      var urls = [];
+      if (Array.isArray(data)) {
+        data.forEach(function(item) {
+          var u = item.hls_path || item.src;
+          if (u && urls.indexOf(u) === -1) urls.push(u);
+        });
       }
-
-      var m3u8Match = str.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
-      if (m3u8Match) return m3u8Match[0];
-    }
-  } catch (_) {}
-  return null;
+      return urls;
+    }).catch(function() { return []; });
+  }).catch(function() { return []; });
 }
 
 function resolveEmbed(embedUrl, referer) {
   if (!embedUrl) return Promise.resolve([]);
 
+  if (embedUrl.indexOf("oynatloload") !== -1 || embedUrl.indexOf("verseneload") !== -1 || embedUrl.indexOf("/embed/") !== -1) {
+    return resolveOynatEmbed(embedUrl);
+  }
+
   return getText(embedUrl, { headers: { Referer: referer || BASE_URL + "/" } }).then(function(html) {
     var urls = [];
-
-    var decrypted = decryptCloseLoad(html);
-    if (decrypted) urls.push(decrypted);
 
     var m3u8Matches = html.match(/https?:\/\/[^"'`\s\\]+\.m3u8[^\s"'`\\]*/gi);
     if (m3u8Matches) {

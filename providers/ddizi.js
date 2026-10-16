@@ -111,10 +111,9 @@ async function searchDDizi(query, base) {
     if (res.ok) {
       var html = await res.text();
       var $ = cheerio.load(html);
-      $("div.dizi-boxpost-cat, div.dizi-boxpost, div.dizi-listesi li").each(function(i, el) {
-        var a = $(el).is("a") ? $(el) : $(el).find("a").first();
-        var href = a.attr("href");
-        var title = a.text();
+      $("a[href*='/diziler/']").each(function(i, el) {
+        var href = $(el).attr("href");
+        var title = $(el).text().trim() || $(el).attr("title") || "";
         if (href && title) {
           results.push({
             title: sanitizeText(title),

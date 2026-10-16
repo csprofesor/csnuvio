@@ -1,9 +1,8 @@
 var cheerio = require("cheerio-without-node-native");
 
 var DOMAINS = [
-  "https://dizimag.onl",
-  "https://dizimag.co",
-  "https://dizimag.vip"
+  "https://dizimag.club",
+  "https://dizimag.co"
 ];
 var BASE_URL = DOMAINS[0];
 var PROVIDER_NAME = "DiziMag";
@@ -120,10 +119,11 @@ async function searchDiziMag(query, base) {
       var $ = cheerio.load(html);
       $("a[href*='/dizi/'], a[href*='/film/']").each(function(i, el) {
         var href = $(el).attr("href");
-        var title = $(el).text().trim() || $(el).attr("title");
+        var rawTitle = $(el).text().trim() || $(el).attr("title") || "";
+        var title = sanitizeText(rawTitle.split("\n")[0]);
         if (href && title) {
           results.push({
-            title: sanitizeText(title),
+            title: title,
             url: href.startsWith("http") ? href : base + (href.startsWith("/") ? "" : "/") + href,
             isMovie: href.indexOf("/film/") !== -1
           });
@@ -140,10 +140,11 @@ async function searchDiziMag(query, base) {
         var $s = cheerio.load(sHtml);
         $s("a[href*='/dizi/'], a[href*='/film/']").each(function(i, el) {
           var href = $s(el).attr("href");
-          var title = $s(el).text().trim() || $s(el).attr("title");
+          var rawTitle = $s(el).text().trim() || $s(el).attr("title") || "";
+          var title = sanitizeText(rawTitle.split("\n")[0]);
           if (href && title) {
             results.push({
-              title: sanitizeText(title),
+              title: title,
               url: href.startsWith("http") ? href : base + (href.startsWith("/") ? "" : "/") + href,
               isMovie: href.indexOf("/film/") !== -1
             });
@@ -174,6 +175,14 @@ async function resolveVidMoly(molyUrl, referer) {
 async function resolveDiziMagPlayer(targetUrl, referer) {
   var streams = [];
   try {
+    if (targetUrl.indexOf("pichive") !== -1 || targetUrl.indexOf("dplayer") !== -1) {
+      streams.push(makeStream(targetUrl, "DiziMag Player", "1080p", false, {
+        "User-Agent": USER_AGENT,
+        "Referer": referer || BASE_URL + "/"
+      }));
+      return streams;
+    }
+
     if (targetUrl.indexOf("vidmoly") !== -1) {
       var m3u8 = await resolveVidMoly(targetUrl, referer);
       if (m3u8) {
@@ -262,30 +271,38 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
       if (!bestMatch || bestScore > 10) continue;
 
+      var baseHeaders = {
+        "User-Agent": USER_AGENT,
+        "Referer": base + "/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
+      };
+
       var targetPageUrl = bestMatch.url;
       if (isTv) {
         try {
-          var seriesRes = await fetch(bestMatch.url, { headers: BASE_HEADERS });
+          var seriesRes = await fetch(bestMatch.url, { headers: baseHeaders });
           if (seriesRes.ok) {
             var sHtml = await seriesRes.text();
             var $s = cheerio.load(sHtml);
             var epCandidate = null;
 
-            $s("a[href*='sezon-'], a[href*='bolum-']").each(function(idx, el) {
+            $s("a[href]").each(function(idx, el) {
               var h = $s(el).attr("href");
-              var txt = $s(el).text();
-              var sM = (h && h.match(/sezon-(\d+)/i)) || txt.match(/(\d+)\.\s*Sezon/i);
-              var eM = (h && h.match(/bolum-(\d+)/i)) || txt.match(/(\d+)\.\s*Bölüm/i);
-
-              if (sM && eM && parseInt(sM[1], 10) === sNum && parseInt(eM[1], 10) === eNum) {
-                epCandidate = h.startsWith("http") ? h : base + (h.startsWith("/") ? "" : "/") + h;
+              if (!h) return;
+              var seMatch = h.match(/\/s(\d+)e(\d+)/i);
+              if (seMatch) {
+                if (parseInt(seMatch[1], 10) === sNum && parseInt(seMatch[2], 10) === eNum) {
+                  epCandidate = h.startsWith("http") ? h : base + (h.startsWith("/") ? "" : "/") + h;
+                }
               }
             });
 
             if (epCandidate) {
               targetPageUrl = epCandidate;
             } else {
-              targetPageUrl = bestMatch.url.replace(/\/$/, "") + "/sezon-" + sNum + "/bolum-" + eNum;
+              var cleanSlug = bestMatch.url.split("/dizi/").pop().replace(/\/$/, "");
+              targetPageUrl = base + "/dizi/dizi/" + cleanSlug + "/s" + sNum + "e" + eNum;
             }
           }
         } catch (e) {}
@@ -293,7 +310,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
       var streams = [];
       try {
-        var pageRes = await fetch(targetPageUrl, { headers: BASE_HEADERS });
+        var pageRes = await fetch(targetPageUrl, { headers: baseHeaders });
         if (pageRes.ok) {
           var pHtml = await pageRes.text();
           var $p = cheerio.load(pHtml);

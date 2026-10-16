@@ -80,19 +80,29 @@ function searchSite(title) {
     var candidates = [];
     var normTitle = normalize(cleanTitle);
 
-    $("div.movie").each(function(_, el) {
-      var a = $(el).find("a").first();
-      var href = abs(a.attr("href"));
+    $("a[href*='-film-izle']").each(function(_, el) {
+      var href = abs($(el).attr("href"));
       if (!href) return;
 
-      var name = sanitizeText(a.text() || a.attr("title") || $(el).find(".title").text() || "");
+      var slug = href.split("/").pop().replace(/-film-izle$/i, "").replace(/-/g, " ");
+      var rawName = $(el).attr("title") || $(el).find("img").attr("alt") || "";
+      if (!rawName || /fragman|dublaj|altyazı/i.test(rawName)) {
+        rawName = slug;
+      }
+      var name = sanitizeText(rawName);
       if (!name) return;
 
       var normName = normalize(name);
-      var dist = distance(normName, normTitle);
+      var normSlug = normalize(slug);
+      var dist1 = distance(normName, normTitle);
+      var dist2 = distance(normSlug, normTitle);
+      var dist = Math.min(dist1, dist2);
 
-      if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-        candidates.push({ href: href, name: name, score: dist });
+      if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 ||
+          normSlug.indexOf(normTitle) !== -1 || normTitle.indexOf(normSlug) !== -1 || dist <= 6) {
+        if (!candidates.some(function(c) { return c.href === href; })) {
+          candidates.push({ href: href, name: name, score: dist });
+        }
       }
     });
 
@@ -139,35 +149,44 @@ function resolveFilmModuSources(pageUrl) {
 
         var vidId = vidIdMatch[1];
         var vidType = vidTypeMatch[1];
-        if (!vidId || !vidType) return [];
+        if (!vidId) return [];
 
-        var getSourceUrl = BASE_URL + "/get-source?movie_id=" + encodeURIComponent(vidId) + "&type=" + encodeURIComponent(vidType);
-
-        return getText(getSourceUrl, {
-          headers: {
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": item.url
-          }
-        }).then(function(resText) {
-          try {
-            var data = JSON.parse(resText);
-            var results = [];
-            if (data.sources && Array.isArray(data.sources)) {
-              data.sources.forEach(function(srcObj) {
-                if (srcObj && srcObj.src) {
-                  results.push({
-                    url: srcObj.src,
-                    label: item.name + (srcObj.label ? " (" + srcObj.label + ")" : ""),
-                    quality: srcObj.label || "HD"
-                  });
-                }
-              });
+        var typesToFetch = vidType ? [vidType] : ["tr", "en"];
+        var sourcePromises = typesToFetch.map(function(t) {
+          var getSourceUrl = BASE_URL + "/get-source?movie_id=" + encodeURIComponent(vidId) + "&type=" + encodeURIComponent(t);
+          return getText(getSourceUrl, {
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "Referer": item.url
             }
-            return results;
-          } catch (_) {
-            return [];
-          }
-        }).catch(function() { return []; });
+          }).then(function(resText) {
+            try {
+              var data = JSON.parse(resText);
+              var results = [];
+              if (data.sources && Array.isArray(data.sources)) {
+                data.sources.forEach(function(srcObj) {
+                  if (srcObj && srcObj.src) {
+                    var audioLabel = (t === "tr" ? "Türkçe Dublaj" : (t === "en" ? "Türkçe Altyazılı" : item.name));
+                    results.push({
+                      url: srcObj.src,
+                      label: audioLabel + (srcObj.label ? " (" + srcObj.label + ")" : ""),
+                      quality: srcObj.label || "HD"
+                    });
+                  }
+                });
+              }
+              return results;
+            } catch (_) {
+              return [];
+            }
+          }).catch(function() { return []; });
+        });
+
+        return Promise.all(sourcePromises).then(function(resArrays) {
+          var merged = [];
+          resArrays.forEach(function(arr) { merged = merged.concat(arr); });
+          return merged;
+        });
       });
     });
 
@@ -187,7 +206,7 @@ function resolveFilmModuSources(pageUrl) {
 
 function makeStream(url, title, quality, label) {
   var lower = url.toLowerCase();
-  var isHls = lower.indexOf(".m3u8") !== -1;
+  var isHls = lower.indexOf(".m3u8") !== -1 || lower.indexOf("imgsapi.pro") !== -1 || lower.indexOf("application/x-mpegurl") !== -1;
   return {
     name: "FilmModu",
     title: label || title,

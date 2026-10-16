@@ -308,7 +308,7 @@ function extractStreamsFromPage(pageUrl, domain) {
           if (pMatch) {
             var streamMatch = pMatch[1].match(/"stream"\s*:\s*"([^"]+)"/);
             if (streamMatch) {
-              var sUrlResolved = streamMatch[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+              var sUrlResolved = streamMatch[1].replace(/\\u0026/g, "&").replace(/u0026/g, "&").replace(/\\\//g, "/");
               if (sUrlResolved && sUrlResolved.startsWith("http")) {
                 return sUrlResolved;
               }
@@ -367,7 +367,7 @@ function resolveEmbed(embedUrl, referer) {
     return getText(embedUrl, { headers: { Referer: referer } }).then(function(html) {
       var m = html.match(/"stream"\s*:\s*"([^"]+)"/);
       if (m) {
-        var u = m[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+        var u = m[1].replace(/\\u0026/g, "&").replace(/u0026/g, "&").replace(/\\\//g, "/");
         if (u && u.startsWith("http")) return [u];
       }
       var m3u8 = html.match(/https?:\/\/[^"'`\s]+\.m3u8[^\s"'`]*/gi);

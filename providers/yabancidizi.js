@@ -1,10 +1,11 @@
 var cheerio = require("cheerio-without-node-native");
 
 var DOMAINS = [
+  "https://yabancidizi.fun",
+  "https://yabancidizi.org",
   "https://yabancidizi.news",
   "https://yabancidizi.pw",
-  "https://yabancidizi.co",
-  "https://yabancidizi.vip"
+  "https://yabancidizi.co"
 ];
 var BASE_URL = DOMAINS[0];
 var PROVIDER_NAME = "YabanciDizi";

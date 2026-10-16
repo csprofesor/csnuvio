@@ -76,6 +76,14 @@ function distance(a, b) {
   return d[a.length][b.length];
 }
 
+function decodeBase64(str) {
+  try {
+    return atob(str.trim());
+  } catch (_) {
+    return str;
+  }
+}
+
 function tmdbDetails(tmdbId, type) {
   var apiKey = "1c29a5198ee1854bd5eb45dbe8d17d92";
   var endpoint = type === "tv" || type === "series" ? "tv" : "movie";
@@ -100,19 +108,22 @@ function searchSite(title) {
     var candidates = [];
     var normTitle = normalize(cleanTitle);
 
-    $("div.film_kutusu, div.icerik div.frag-k, div.frag-k").each(function(_, el) {
-      var a = $(el).find("a").first();
+    $("div.film_kutusu, div.icerik, article, div.movie-box").each(function(_, el) {
+      var a = $(el).find("a[href]").first();
       var href = abs(a.attr("href"));
-      if (!href) return;
+      if (!href || href === BASE_URL || href === BASE_URL + "/") return;
 
-      var name = sanitizeText($(el).find("span.title span.text, div.yanac span, .title").text() || a.attr("title") || "");
-      name = name.replace(/\s*izle$/i, "").trim();
+      var name = sanitizeText($(el).find("span.title, h2, h3, .title").text() || a.attr("title") || a.text() || "");
+      name = name.replace(/\s*(?:İzle|izle|HD)$/gi, "").trim();
       if (!name) return;
 
       var normName = normalize(name);
       var dist = distance(normName, normTitle);
+
       if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-        candidates.push({ href: href, name: name, score: dist });
+        if (!candidates.some(function(c) { return c.href === href; })) {
+          candidates.push({ href: href, name: name, score: dist });
+        }
       }
     });
 
@@ -121,129 +132,87 @@ function searchSite(title) {
   }).catch(function() { return null; });
 }
 
-function decodeIfBase64(input) {
-  var trimmed = (input || "").trim();
-  if (!trimmed) return "";
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("//")) {
-    return trimmed;
+function resolvePlayer(sourceUrl, label, referer) {
+  if (!sourceUrl || sourceUrl.indexOf("youtube.com") !== -1 || sourceUrl.indexOf("fragman") !== -1) {
+    return Promise.resolve([]);
   }
-  try {
-    var dec = atob(trimmed).trim();
-    if (dec.startsWith("http://") || dec.startsWith("https://") || dec.startsWith("//")) {
-      return dec;
-    }
-  } catch (_) {}
-  return trimmed;
-}
 
-function resolvePlayerHtml(iframeUrl, referer) {
-  if (!iframeUrl) return Promise.resolve([]);
+  if (sourceUrl.indexOf("player.filmizle.in") !== -1) {
+    var cleanUrl = sourceUrl.split("?")[0];
+    var parts = cleanUrl.split("/").filter(Boolean);
+    var dataKey = parts.pop();
+    var hostMatch = cleanUrl.match(/https?:\/\/([^\/]+)/);
+    var host = hostMatch ? hostMatch[1] : "player.filmizle.in";
 
-  if (iframeUrl.indexOf("player.filmizle.in") !== -1) {
-    var originMatch = iframeUrl.match(/https?:\/\/[^\/]+/);
-    var origin = originMatch ? originMatch[0] : "https://player.filmizle.in";
-    var dataKey = iframeUrl.split("/").pop().split("?")[0];
+    var apiUrl = "https://" + host + "/player/index.php?data=" + dataKey + "&do=getVideo";
 
-    return postForm(origin + "/player/index.php?data=" + encodeURIComponent(dataKey) + "&do=getVideo", {}, BASE_URL + "/").then(function(resText) {
+    return postForm(apiUrl, {}, referer || BASE_URL + "/").then(function(resText) {
       try {
-        var json = JSON.parse(resText);
-        if (json.securedLink) {
-          return [json.securedLink];
+        var data = JSON.parse(resText);
+        var streamUrl = data.securedLink || data.videoSource;
+        if (streamUrl) {
+          return [{
+            url: streamUrl,
+            label: label || "HD",
+            quality: "1080p"
+          }];
         }
       } catch (_) {}
       return [];
     }).catch(function() { return []; });
   }
 
-  return getText(iframeUrl, { headers: { Referer: referer || BASE_URL + "/" } }).then(function(html) {
-    var urls = [];
-
-    var fileMatches = html.match(/file\s*:\s*["']([^"']+)["']/g);
-    if (fileMatches) {
-      fileMatches.forEach(function(m) {
-        var uMatch = m.match(/file\s*:\s*["']([^"']+)["']/);
-        if (uMatch) {
-          var u = uMatch[1].replace(/\\\//g, "/");
-          if (u.startsWith("//")) u = "https:" + u;
-          if (urls.indexOf(u) === -1) urls.push(u);
-        }
-      });
-    }
-
-    var m3u8Matches = html.match(/https?:\/\/[^"'`\s\\]+\.m3u8[^\s"'`\\]*/gi);
-    if (m3u8Matches) {
-      m3u8Matches.forEach(function(u) {
-        var clean = u.replace(/\\\//g, "/");
-        if (urls.indexOf(clean) === -1) urls.push(clean);
-      });
-    }
-
-    var mp4Matches = html.match(/https?:\/\/[^"'`\s\\]+\.mp4[^\s"'`\\]*/gi);
-    if (mp4Matches) {
-      mp4Matches.forEach(function(u) {
-        var clean = u.replace(/\\\//g, "/");
-        if (urls.indexOf(clean) === -1) urls.push(clean);
-      });
-    }
-
-    return urls;
-  }).catch(function() { return []; });
+  return Promise.resolve([]);
 }
 
-function resolveSinemaCXSources(pageUrl) {
-  return getText(pageUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
+function findSources(movieUrl) {
+  return getText(movieUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
     var $ = cheerio.load(html);
     var rawSources = [];
 
-    $("div.player_part button[rel], button.part_button[rel], button.grup_button[rel]").each(function(_, el) {
-      var rel = $(el).attr("rel");
-      if (rel) rawSources.push(rel);
-    });
-
-    $("iframe#video_playeriframe, iframe[data-vsrc], iframe[src]").each(function(_, el) {
-      var vsrc = $(el).attr("data-vsrc") || $(el).attr("src");
-      if (vsrc) rawSources.push(vsrc);
-    });
-
-    var validUrls = [];
-    rawSources.forEach(function(raw) {
-      var dec = decodeIfBase64(raw);
-      var u = abs(dec, pageUrl);
-      if (u && u.indexOf("youtube") === -1 && u.indexOf("fragman") === -1 && u.indexOf("trailer") === -1) {
-        var clean = u.split("?img=")[0];
-        if (validUrls.indexOf(clean) === -1) validUrls.push(clean);
+    $("div.player_part button[rel], button.part_button[rel], button.grup_button[rel]").each(function(_, button) {
+      var rel = $(button).attr("rel");
+      var label = $(button).text().trim();
+      if (rel) {
+        var dec = decodeBase64(rel);
+        if (dec) rawSources.push({ url: dec, label: label });
       }
     });
 
-    var resolvePromises = validUrls.map(function(u) {
-      return resolvePlayerHtml(u, pageUrl);
+    $("iframe#video_playeriframe, iframe[data-vsrc], iframe[src]").each(function(_, iframe) {
+      var vsrc = $(iframe).attr("data-vsrc") || $(iframe).attr("src");
+      if (vsrc) {
+        var dec = decodeBase64(vsrc);
+        if (dec) rawSources.push({ url: dec, label: "Player" });
+      }
     });
 
-    return Promise.all(resolvePromises).then(function(resultsArray) {
-      var all = [];
-      resultsArray.forEach(function(arr) {
-        arr.forEach(function(u) {
-          if (u && all.indexOf(u) === -1) all.push(u);
+    var resolvePromises = rawSources.map(function(item) {
+      return resolvePlayer(item.url, item.label, movieUrl);
+    });
+
+    return Promise.all(resolvePromises).then(function(results) {
+      var streams = [];
+      results.forEach(function(arr) {
+        arr.forEach(function(s) {
+          if (s && s.url && !streams.some(function(x) { return x.url === s.url; })) {
+            streams.push(s);
+          }
         });
       });
-      return all;
+      return streams;
     });
   }).catch(function() { return []; });
 }
 
-function makeStream(url, title, index) {
+function makeStream(url, title, quality, label) {
   var lower = url.toLowerCase();
-  var quality = "HD";
-  var q = lower.match(/(?:2160|1440|1080|720|576|480|360)p/);
-  if (q) quality = q[0];
-  else if (lower.indexOf("4k") !== -1) quality = "4K";
-
   var isHls = lower.indexOf(".m3u8") !== -1;
   return {
     name: "SinemaCX",
-    title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
+    title: label || title,
     url: url,
-    quality: quality,
+    quality: quality || "1080p",
     type: isHls ? "hls" : "mp4",
     headers: {
       "Referer": BASE_URL + "/",
@@ -254,7 +223,9 @@ function makeStream(url, title, index) {
 }
 
 function getStreams(tmdbId, mediaType) {
-  if (mediaType === "tv" || mediaType === "series") return Promise.resolve([]);
+  if (mediaType === "tv" || mediaType === "series") {
+    return Promise.resolve([]);
+  }
 
   return tmdbDetails(tmdbId, mediaType).then(function(info) {
     if (!info || !info.title) return [];
@@ -273,10 +244,10 @@ function getStreams(tmdbId, mediaType) {
     return trySearch(0).then(function(movieUrl) {
       if (!movieUrl) return [];
 
-      return resolveSinemaCXSources(movieUrl).then(function(streamUrls) {
-        var label = info.title + (info.year ? " (" + info.year + ")" : "");
-        return streamUrls.map(function(u, idx) {
-          return makeStream(u, label, idx);
+      return findSources(movieUrl).then(function(sourceList) {
+        var baseTitle = info.title + (info.year ? " (" + info.year + ")" : "");
+        return sourceList.map(function(s) {
+          return makeStream(s.url, baseTitle, s.quality, baseTitle + " • " + s.label);
         });
       });
     });
