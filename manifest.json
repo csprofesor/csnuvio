@@ -14,7 +14,7 @@
       "version": "1.0.5",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/dizimom.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizimom.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -26,7 +26,7 @@
       "version": "1.0.5",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/dizipal.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizipal.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -38,7 +38,7 @@
       "version": "1.0.5",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/hdfilmcehennemi.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/hdfilmcehennemi.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -50,7 +50,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/filmmodu.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmmodu.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -62,7 +62,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/filmmakinesi.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmmakinesi.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -74,7 +74,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/filmkovasi.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmkovasi.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -86,7 +86,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/setfilmizle.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/setfilmizle.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -98,7 +98,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/fullhdfilm.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/fullhdfilm.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -110,7 +110,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/jetfilmizle.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/jetfilmizle.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -122,7 +122,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/webteizle.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/webteizle.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -134,7 +134,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/kultfilmler.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/kultfilmler.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -146,7 +146,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/tavsiyefilmizle.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/tavsiyefilmizle.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -158,7 +158,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/sinemacx.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sinemacx.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -170,7 +170,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie"],
-      "filename": "providers/hintfilmizle.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/hintfilmizle.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -182,7 +182,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv"],
-      "filename": "providers/dizibox.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizibox.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -194,7 +194,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv"],
-      "filename": "providers/dizilla.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizilla.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -206,7 +206,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/dizigom.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizigom.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -218,7 +218,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv"],
-      "filename": "providers/sezonlukdizi.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sezonlukdizi.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -230,7 +230,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/yabancidizi.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/yabancidizi.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -242,7 +242,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv"],
-      "filename": "providers/ddizi.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/ddizi.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -254,7 +254,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/dizikorea.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizikorea.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -266,7 +266,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/dizimag.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizimag.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -278,7 +278,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/selcukflix.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/selcukflix.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -290,7 +290,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/sinewix.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sinewix.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -302,7 +302,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/sinematv.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sinematv.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -314,7 +314,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/animecix.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/animecix.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -326,7 +326,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/anizm.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/anizm.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -338,7 +338,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["tv", "movie"],
-      "filename": "providers/belgeselx.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/belgeselx.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["tr"]
@@ -350,7 +350,7 @@
       "version": "1.0.4",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
-      "filename": "providers/watch2movies.js",
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/watch2movies.js",
       "enabled": true,
       "formats": ["m3u8", "mp4"],
       "contentLanguage": ["en"]
