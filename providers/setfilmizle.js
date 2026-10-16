@@ -15,6 +15,27 @@ var BASE_HEADERS = {
   "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
 };
 
+function calcXSp(sp, spT, offsetSec) {
+  var chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+  var num = Math.floor(Math.random() * 2176782336);
+  var r = "";
+  while (num > 0) {
+    r = chars[num % 36] + r;
+    num = Math.floor(num / 36);
+  }
+  if (!r) r = "0";
+
+  var tNow = (spT || 0) + (offsetSec || 0);
+  var s = (sp || "") + "|" + tNow + "|" + r;
+  var t = 2166136261;
+  for (var i = 0; i < s.length; i++) {
+    t = t ^ s.charCodeAt(i);
+    t = Math.imul(t, 16777619) >>> 0;
+  }
+  var hashHex = (t >>> 0).toString(16);
+  return tNow + "." + r + "." + hashHex;
+}
+
 function decryptSpgXor(encText, encKey) {
   try {
     var r = Buffer.from(encText, "base64").toString("binary");
@@ -76,7 +97,7 @@ function makeStream(url, label, quality, isHls, headers) {
     type: isHls ? "hls" : "mp4",
     headers: headers || {
       "User-Agent": USER_AGENT,
-      "Referer": BASE_URL + "/"
+      "Referer": "https://fastplay.mom/"
     },
     provider: "setfilmizle"
   };
@@ -120,40 +141,49 @@ async function resolveSetPlayPlayer(embedUrl, referer) {
     var cerceveMatch = pHtml.match(/SPG\.cerceve\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/) ||
                        pHtml.match(/cerceve\s*\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\)/);
 
+    var targetUrl = embedUrl;
     if (cerceveMatch) {
       var dec = decryptSpgXor(cerceveMatch[2], cerceveMatch[3]);
       if (dec && dec[0]) {
-        var targetUrl = dec[0];
-        if (targetUrl.indexOf("fastplay.mom") !== -1 || targetUrl.indexOf("stfplay.php") !== -1) {
-          return resolveSetPlayPlayer(targetUrl, embedUrl);
-        }
-        streams.push(makeStream(targetUrl, "SetPlay Player", "1080p", targetUrl.indexOf(".m3u8") !== -1, {
+        targetUrl = dec[0];
+      }
+    }
+
+    var fastRes = await fetch(targetUrl, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Referer": "https://setplay.shop/"
+      }
+    });
+    if (!fastRes.ok) return streams;
+    var fastHtml = await fastRes.text();
+
+    var spgMatch = fastHtml.match(/window\.SPG_A\s*=\s*(\{.*?\}|\{.*\});/s);
+    var sp = "", spT = 0;
+    if (spgMatch) {
+      try {
+        var spgObj = JSON.parse(spgMatch[1]);
+        sp = spgObj.sp || "";
+        spT = spgObj.spT || 0;
+      } catch (errSpg) {}
+    }
+
+    var kopruMatch = fastHtml.match(/window\.STF_KOPRU\s*=\s*(\{.*?\}|\{.*\});/s);
+    if (kopruMatch) {
+      var srcMatch = kopruMatch[1].match(/src:\s*"([^"]+)"/);
+      if (srcMatch) {
+        var manifestPath = srcMatch[1];
+        var manifestUrl = manifestPath.startsWith("http") ? manifestPath : "https://fastplay.mom" + manifestPath;
+        var xSp = calcXSp(sp, spT, 0);
+
+        streams.push(makeStream(manifestUrl, "SetPlay Master HLS", "1080p", true, {
           "User-Agent": USER_AGENT,
-          "Referer": embedUrl
+          "Referer": targetUrl,
+          "X-Sp": xSp
         }));
         return streams;
       }
     }
-
-    var kopruMatch = pHtml.match(/STF_KOPRU\s*=\s*(\{.*?\});/s);
-    if (kopruMatch) {
-      try {
-        var kObj = JSON.parse(kopruMatch[1].replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":'));
-        if (kObj && kObj.src) {
-          var fullSrc = kObj.src.startsWith("http") ? kObj.src : "https://fastplay.mom" + kObj.src;
-          streams.push(makeStream(fullSrc, "SetPlay Fast", "1080p", true, {
-            "User-Agent": USER_AGENT,
-            "Referer": embedUrl
-          }));
-          return streams;
-        }
-      } catch (eK) {}
-    }
-
-    streams.push(makeStream(embedUrl, "SetPlay Stream", "1080p", embedUrl.indexOf(".m3u8") !== -1, {
-      "User-Agent": USER_AGENT,
-      "Referer": referer || BASE_URL + "/"
-    }));
   } catch (e) {}
   return streams;
 }
