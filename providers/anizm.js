@@ -1,19 +1,18 @@
+"use strict";
+
 var cheerio = require("cheerio-without-node-native");
 
 var DOMAINS = [
   "https://anizm.com.tr",
-  "https://anizm.net",
-  "https://anizm.tv"
+  "https://anizm.org"
 ];
 var BASE_URL = DOMAINS[0];
 var PROVIDER_NAME = "Anizm";
-var TMDB_API_KEY = "8265bd1679663a7ea12ac168da84d2e8";
 
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var BASE_HEADERS = {
   "User-Agent": USER_AGENT,
   "Referer": BASE_URL + "/",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
 };
 
@@ -55,32 +54,6 @@ function levenshteinDistance(s1, s2) {
   return matrix[b.length][a.length];
 }
 
-async function fetchTmdbDetails(tmdbId, mediaType) {
-  try {
-    var type = mediaType === "movie" ? "movie" : "tv";
-    var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR");
-    var dataTr = resTr.ok ? await resTr.json() : null;
-
-    var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=en-US");
-    var dataEn = resEn.ok ? await resEn.json() : null;
-
-    var titleTr = dataTr ? (dataTr.title || dataTr.name) : "";
-    var titleEn = dataEn ? (dataEn.title || dataEn.name) : "";
-    var origTitle = (dataEn && dataEn.original_title) || (dataEn && dataEn.original_name) || "";
-    var date = (dataEn && (dataEn.release_date || dataEn.first_air_date)) || "";
-    var year = date ? parseInt(date.substring(0, 4), 10) : null;
-
-    return {
-      titleTr: titleTr || titleEn || origTitle,
-      titleEn: titleEn || origTitle || titleTr,
-      originalTitle: origTitle,
-      year: year
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
 function makeStream(url, label, quality, isHls, headers) {
   return {
     name: PROVIDER_NAME,
@@ -90,29 +63,32 @@ function makeStream(url, label, quality, isHls, headers) {
     type: isHls ? "hls" : "mp4",
     headers: headers || {
       "User-Agent": USER_AGENT,
-      "Referer": BASE_URL + "/"
+      "Referer": "https://anizmplayer.com/"
     },
     provider: "anizm"
   };
 }
 
-async function searchAnizm(query, base) {
+async function searchAnizm(query) {
   var results = [];
   try {
-    var res = await fetch(base + "/arama?arama=" + encodeURIComponent(query), { headers: BASE_HEADERS });
+    var searchUrl = BASE_URL + "/arama?arama=" + encodeURIComponent(query);
+    var res = await fetch(searchUrl, { headers: BASE_HEADERS });
     if (res.ok) {
       var html = await res.text();
       var $ = cheerio.load(html);
-      $("article.v3-catalog-card, div.searchResultItem, div.posterBlock").each(function(i, el) {
-        var a = $(el).find("h2 a, a.v3-catalog-poster, a[href]").first();
+      $("article.v3-catalog-card, div.searchResultItem, div.posterBlock, .v3-poster-rail").each(function(_, el) {
+        var a = $(el).is("a") ? $(el) : $(el).find("a[href]").first();
         var href = a.attr("href");
-        var title = $(el).find("h2").text() || $(el).find("img").attr("alt") || a.text();
-        title = title.replace(/\s*(posteri|izle)$/gi, "").trim();
-        if (href && title) {
-          results.push({
-            title: sanitizeText(title),
-            url: href.startsWith("http") ? href : base + (href.startsWith("/") ? "" : "/") + href
-          });
+        var name = $(el).find("h2, h3, h4, .v3-card-copy h3").text() || a.attr("title") || a.text();
+        if (href) {
+          var slug = href.split("/").filter(Boolean).pop();
+          if (slug && !slug.includes("sayfa=") && !slug.includes("arama=") && !results.some(function(r) { return r.slug === slug; })) {
+            results.push({
+              slug: slug,
+              title: sanitizeText(name.split("\n")[0])
+            });
+          }
         }
       });
     }
@@ -120,179 +96,157 @@ async function searchAnizm(query, base) {
   return results;
 }
 
-async function resolveVidMoly(molyUrl, referer) {
-  try {
-    var res = await fetch(molyUrl, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Referer": referer || BASE_URL + "/"
-      }
-    });
-    if (!res.ok) return null;
-    var html = await res.text();
-    var m = html.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i) || html.match(/sources:\s*\[\s*\{\s*file:\s*["']([^"']+)["']/i);
-    if (m && m[1]) return m[1];
-  } catch (e) {}
-  return null;
-}
-
-async function resolveAnizmPlayer(playerUrl, referer) {
+async function resolveAnizmPlayer(playerPageUrl) {
   var streams = [];
   try {
-    if (playerUrl.indexOf("vidmoly") !== -1) {
-      var molyM3u8 = await resolveVidMoly(playerUrl, referer);
-      if (molyM3u8) {
-        streams.push(makeStream(molyM3u8, "VidMoly [Anizm]", "1080p", true, {
-          "User-Agent": USER_AGENT,
-          "Referer": playerUrl
-        }));
-      }
-      return streams;
-    }
-
-    var res = await fetch(playerUrl, {
+    var pRes = await fetch(playerPageUrl, {
       headers: {
         "User-Agent": USER_AGENT,
-        "Referer": referer || BASE_URL + "/"
+        "Referer": BASE_URL + "/"
       }
     });
-    if (!res.ok) return streams;
-    var html = await res.text();
+    if (!pRes.ok) return streams;
+    var pHtml = await pRes.text();
 
-    var keyMatch = html.match(/FirePlayer\(["']([^"']+)["']/i) || html.match(/video\/([a-zA-Z0-9_-]+)/);
-    if (keyMatch && keyMatch[1]) {
-      var key = keyMatch[1];
-      var postUrl = "https://anizmplayer.com/player/index.php?data=" + encodeURIComponent(key) + "&do=getVideo";
-      var postRes = await fetch(postUrl, {
-        method: "POST",
-        headers: {
-          "User-Agent": USER_AGENT,
-          "Origin": "https://anizmplayer.com",
-          "Referer": "https://anizmplayer.com/video/" + key,
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "X-Requested-With": "XMLHttpRequest"
-        },
-        body: "hash=" + encodeURIComponent(key) + "&r=" + encodeURIComponent(BASE_URL + "/")
-      });
-      if (postRes.ok) {
-        var postJson = await postRes.json();
-        var streamUrl = postJson.securedLink || postJson.videoSource;
-        if (streamUrl) {
-          streams.push(makeStream(streamUrl, "Anizm Player", "1080p", true, {
+    var allKeys = pHtml.match(/\b[a-f0-9]{32}\b/g) || [];
+    for (var k = 0; k < allKeys.length; k++) {
+      var key = allKeys[k];
+      if (key === "00000000000000000000000000000000") continue;
+
+      try {
+        var params = new URLSearchParams();
+        params.append("hash", key);
+        params.append("r", BASE_URL + "/");
+
+        var postRes = await fetch("https://anizmplayer.com/player/index.php?data=" + key + "&do=getVideo", {
+          method: "POST",
+          headers: {
             "User-Agent": USER_AGENT,
-            "Referer": "https://anizmplayer.com/"
-          }));
-        }
-      }
-    }
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": "https://anizmplayer.com",
+            "Referer": "https://anizmplayer.com/video/" + key
+          },
+          body: params.toString()
+        });
 
-    var directM = html.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i) ||
-                  html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
-    if (directM && directM[1]) {
-      streams.push(makeStream(directM[1], "Anizm Fast", "1080p", true, {
-        "User-Agent": USER_AGENT,
-        "Referer": playerUrl
-      }));
+        if (postRes.ok) {
+          var text = await postRes.text();
+          var postData = JSON.parse(text);
+          var videoUrl = postData.securedLink || postData.videoSource;
+          if (videoUrl) {
+            streams.push(makeStream(videoUrl, "Anizm Player", "1080p", videoUrl.indexOf(".m3u8") !== -1, {
+              "User-Agent": USER_AGENT,
+              "Referer": "https://anizmplayer.com/"
+            }));
+            break;
+          }
+        }
+      } catch (errKey) {}
     }
   } catch (e) {}
   return streams;
 }
 
 async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
-  var tmdb = await fetchTmdbDetails(tmdbId, mediaType);
-  if (!tmdb) return [];
+  var type = mediaType === "movie" ? "movie" : "tv";
+  var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=tr-TR").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+  var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
 
-  var isTv = mediaType === "tv";
-  var sNum = parseInt(seasonNum, 10) || 1;
-  var eNum = parseInt(episodeNum, 10) || 1;
+  var titleTr = resTr ? (resTr.title || resTr.name) : "";
+  var titleEn = resEn ? (resEn.title || resEn.name) : "";
+  var origTitle = (resEn && resEn.original_title) || (resEn && resEn.original_name) || "";
 
-  var titlesToSearch = [tmdb.titleTr, tmdb.titleEn, tmdb.originalTitle].filter(function(v, i, self) {
+  var titlesToSearch = [titleTr, titleEn, origTitle].filter(function(v, i, self) {
     return v && self.indexOf(v) === i;
   });
 
-  for (var d = 0; d < DOMAINS.length; d++) {
-    var base = DOMAINS[d];
-    for (var t = 0; t < titlesToSearch.length; t++) {
-      var query = titlesToSearch[t];
-      var searchItems = await searchAnizm(query, base);
-      if (!searchItems || searchItems.length === 0) continue;
+  var eNum = parseInt(episodeNum, 10) || 1;
 
-      var bestMatch = null;
-      var bestScore = 999;
-      var normTr = normalizeTitle(tmdb.titleTr);
-      var normEn = normalizeTitle(tmdb.titleEn);
+  for (var t = 0; t < titlesToSearch.length; t++) {
+    var query = titlesToSearch[t];
+    var searchItems = await searchAnizm(query);
+    if (!searchItems || searchItems.length === 0) continue;
 
-      for (var i = 0; i < searchItems.length; i++) {
-        var it = searchItems[i];
-        var itemNorm = normalizeTitle(it.title);
-        var dist = Math.min(levenshteinDistance(itemNorm, normTr), levenshteinDistance(itemNorm, normEn));
-        if (itemNorm.indexOf(normTr) !== -1 || itemNorm.indexOf(normEn) !== -1) {
-          dist = Math.floor(dist / 2);
-        }
-        if (dist < bestScore) {
-          bestScore = dist;
-          bestMatch = it;
-        }
+    var bestMatch = null;
+    var bestScore = 999;
+    var normTr = normalizeTitle(titleTr);
+    var normEn = normalizeTitle(titleEn);
+
+    for (var i = 0; i < searchItems.length; i++) {
+      var it = searchItems[i];
+      var itemNorm = normalizeTitle(it.title || it.slug);
+      var dist = Math.min(levenshteinDistance(itemNorm, normTr), levenshteinDistance(itemNorm, normEn));
+      if (itemNorm.indexOf(normTr) !== -1 || itemNorm.indexOf(normEn) !== -1 || it.slug.indexOf(normTr) !== -1) {
+        dist = Math.floor(dist / 2);
       }
+      if (dist < bestScore) {
+        bestScore = dist;
+        bestMatch = it;
+      }
+    }
 
-      if (!bestMatch || bestScore > 10) continue;
+    if (!bestMatch) continue;
 
-      var epUrl = bestMatch.url;
-      try {
-        var animeRes = await fetch(bestMatch.url, { headers: BASE_HEADERS });
-        if (animeRes.ok) {
-          var aHtml = await animeRes.text();
-          var $a = cheerio.load(aHtml);
-          var epFound = null;
+    var epPageUrl = BASE_URL + "/" + bestMatch.slug + "-" + eNum + "-bolum";
 
-          $a("div.v3-episode-list a, .info_episodeList a, a[href*='-bolum']").each(function(idx, el) {
-            var h = $a(el).attr("href");
-            var name = $a(el).text();
-            var eM = name.match(/(\d+)\.\s*Bölüm/i) || (h && h.match(/-(\d+)-bolum/i));
-            if (eM && parseInt(eM[1], 10) === eNum) {
-              epFound = h.startsWith("http") ? h : base + (h.startsWith("/") ? "" : "/") + h;
+    try {
+      var epRes = await fetch(epPageUrl, { headers: BASE_HEADERS });
+      if (epRes.ok) {
+        var epHtml = await epRes.text();
+        var $ep = cheerio.load(epHtml);
+
+        var btn = $ep(".v3-translator-button[data-sources], button[data-sources]").first();
+        var sourcesUrl = btn.attr("data-sources");
+        if (!sourcesUrl) {
+          sourcesUrl = $ep("button[data-sources]").attr("data-sources");
+        }
+
+        if (sourcesUrl) {
+          var fullSourcesUrl = sourcesUrl.startsWith("http") ? sourcesUrl : BASE_URL + sourcesUrl;
+          var srcRes = await fetch(fullSourcesUrl, {
+            headers: {
+              "User-Agent": USER_AGENT,
+              "X-Requested-With": "XMLHttpRequest",
+              "Referer": epPageUrl
             }
           });
 
-          if (epFound) epUrl = epFound;
-        }
-      } catch (e) {}
+          if (srcRes.ok) {
+            var srcData = await srcRes.json();
+            var videos = srcData.videos || [];
+            for (var vi = 0; vi < Math.min(videos.length, 3); vi++) {
+              var vidId = videos[vi].id;
+              var vidInfoUrl = BASE_URL + "/video/" + vidId;
+              var vidRes = await fetch(vidInfoUrl, {
+                headers: {
+                  "User-Agent": USER_AGENT,
+                  "X-Requested-With": "XMLHttpRequest",
+                  "Referer": epPageUrl
+                }
+              });
 
-      var streams = [];
-      try {
-        var epRes = await fetch(epUrl, { headers: BASE_HEADERS });
-        if (epRes.ok) {
-          var epHtml = await epRes.text();
-          var $ep = cheerio.load(epHtml);
+              if (vidRes.ok) {
+                var vidData = await vidRes.json();
+                var playerIframe = vidData.url;
+                if (vidData.player) {
+                  var $p = cheerio.load(vidData.player);
+                  playerIframe = $p("iframe").attr("src") || vidData.url;
+                }
 
-          var playerUrls = [];
-          $ep(".v3-translator-button[data-sources], button[data-sources]").each(function(idx, el) {
-            var ds = $ep(el).attr("data-sources");
-            if (ds && playerUrls.indexOf(ds) === -1) playerUrls.push(ds);
-          });
-
-          $ep("iframe[src]").each(function(idx, el) {
-            var src = $ep(el).attr("src");
-            if (src && playerUrls.indexOf(src) === -1) playerUrls.push(src);
-          });
-
-          for (var pi = 0; pi < playerUrls.length; pi++) {
-            var pUrl = playerUrls[pi];
-            if (pUrl.startsWith("//")) pUrl = "https:" + pUrl;
-            else if (pUrl.startsWith("/")) pUrl = base + pUrl;
-
-            var resS = await resolveAnizmPlayer(pUrl, epUrl);
-            for (var si = 0; si < resS.length; si++) {
-              streams.push(resS[si]);
+                if (playerIframe) {
+                  var fullPlayerUrl = playerIframe.startsWith("http") ? playerIframe : (playerIframe.startsWith("//") ? "https:" + playerIframe : BASE_URL + playerIframe);
+                  var streams = await resolveAnizmPlayer(fullPlayerUrl);
+                  if (streams && streams.length > 0) {
+                    return streams;
+                  }
+                }
+              }
             }
           }
         }
-      } catch (err) {}
-
-      if (streams.length > 0) {
-        return streams;
       }
-    }
+    } catch (e) {}
   }
 
   return [];

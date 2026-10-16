@@ -1,19 +1,17 @@
+"use strict";
+
 var cheerio = require("cheerio-without-node-native");
 
 var DOMAINS = [
-  "https://dizikorea3.com",
-  "https://dizikorea.com",
-  "https://dizikorea.net"
+  "https://dizikorea3.com"
 ];
 var BASE_URL = DOMAINS[0];
 var PROVIDER_NAME = "DiziKorea";
-var TMDB_API_KEY = "8265bd1679663a7ea12ac168da84d2e8";
 
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var BASE_HEADERS = {
   "User-Agent": USER_AGENT,
   "Referer": BASE_URL + "/",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
   "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
 };
 
@@ -55,32 +53,6 @@ function levenshteinDistance(s1, s2) {
   return matrix[b.length][a.length];
 }
 
-async function fetchTmdbDetails(tmdbId, mediaType) {
-  try {
-    var type = mediaType === "movie" ? "movie" : "tv";
-    var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR");
-    var dataTr = resTr.ok ? await resTr.json() : null;
-
-    var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=en-US");
-    var dataEn = resEn.ok ? await resEn.json() : null;
-
-    var titleTr = dataTr ? (dataTr.title || dataTr.name) : "";
-    var titleEn = dataEn ? (dataEn.title || dataEn.name) : "";
-    var origTitle = (dataEn && dataEn.original_title) || (dataEn && dataEn.original_name) || "";
-    var date = (dataEn && (dataEn.release_date || dataEn.first_air_date)) || "";
-    var year = date ? parseInt(date.substring(0, 4), 10) : null;
-
-    return {
-      titleTr: titleTr || titleEn || origTitle,
-      titleEn: titleEn || origTitle || titleTr,
-      originalTitle: origTitle,
-      year: year
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
 function makeStream(url, label, quality, isHls, headers) {
   return {
     name: PROVIDER_NAME,
@@ -96,49 +68,35 @@ function makeStream(url, label, quality, isHls, headers) {
   };
 }
 
-async function searchDiziKorea(query, base) {
+async function searchDiziKorea(query) {
   var results = [];
   try {
-    var res = await fetch(base + "/ara?q=" + encodeURIComponent(query), { headers: BASE_HEADERS });
+    var searchUrl = BASE_URL + "/ara?q=" + encodeURIComponent(query);
+    var res = await fetch(searchUrl, { headers: BASE_HEADERS });
     if (res.ok) {
-      var text = await res.text();
-      try {
-        var json = JSON.parse(text);
-        if (json && Array.isArray(json.items)) {
-          for (var i = 0; i < json.items.length; i++) {
-            var it = json.items[i];
-            if (it.title && it.url) {
-              results.push({
-                title: sanitizeText(it.title),
-                url: it.url.startsWith("http") ? it.url : base + (it.url.startsWith("/") ? "" : "/") + it.url
-              });
-            }
-          }
+      var json = await res.json();
+      var items = json.items || [];
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it.title && it.url) {
+          results.push({
+            title: sanitizeText(it.title),
+            url: it.url,
+            isMovie: it.url.indexOf("/film/") !== -1
+          });
         }
-      } catch (errJson) {
-        var $ = cheerio.load(text);
-        $("a.poster-card").each(function(i, el) {
-          var href = $(el).attr("href");
-          var title = $(el).find("span.poster-card-title, div.poster-card-meta, h3, h2").first().text();
-          if (href && title) {
-            results.push({
-              title: sanitizeText(title),
-              url: href.startsWith("http") ? href : base + (href.startsWith("/") ? "" : "/") + href
-            });
-          }
-        });
       }
     }
   } catch (e) {}
   return results;
 }
 
-async function resolveVidMoly(molyUrl, referer) {
+async function resolveVidMoly(molyUrl) {
   try {
     var res = await fetch(molyUrl, {
       headers: {
         "User-Agent": USER_AGENT,
-        "Referer": referer || BASE_URL + "/"
+        "Referer": BASE_URL + "/"
       }
     });
     if (!res.ok) return null;
@@ -152,6 +110,49 @@ async function resolveVidMoly(molyUrl, referer) {
 async function resolveIframe(iframeUrl, referer) {
   var streams = [];
   try {
+    if (iframeUrl.indexOf("playerdkorea.xyz") !== -1 || iframeUrl.indexOf("/player/index.php") !== -1) {
+      var pRes = await fetch(iframeUrl, { headers: { "User-Agent": USER_AGENT, "Referer": BASE_URL + "/" } });
+      if (pRes.ok) {
+        var pHtml = await pRes.text();
+        var allKeys = pHtml.match(/\b[a-f0-9]{32}\b/g) || [];
+        for (var k = 0; k < allKeys.length; k++) {
+          var key = allKeys[k];
+          if (key === "00000000000000000000000000000000") continue;
+          try {
+            var params = new URLSearchParams();
+            params.append("hash", key);
+            params.append("r", BASE_URL + "/");
+
+            var postRes = await fetch("https://playerdkorea.xyz/player/index.php?data=" + key + "&do=getVideo", {
+              method: "POST",
+              headers: {
+                "User-Agent": USER_AGENT,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": "https://playerdkorea.xyz",
+                "Referer": "https://playerdkorea.xyz/video/" + key
+              },
+              body: params.toString()
+            });
+
+            if (postRes.ok) {
+              var text = await postRes.text();
+              var postData = JSON.parse(text);
+              var videoUrl = postData.securedLink || postData.videoSource;
+              if (videoUrl) {
+                streams.push(makeStream(videoUrl, "DiziKorea Player", "1080p", videoUrl.indexOf(".m3u8") !== -1, {
+                  "User-Agent": USER_AGENT,
+                  "Referer": "https://playerdkorea.xyz/"
+                }));
+                break;
+              }
+            }
+          } catch (errK) {}
+        }
+      }
+      if (streams.length > 0) return streams;
+    }
+
     if (iframeUrl.indexOf("vidmoly") !== -1) {
       var m3u8 = await resolveVidMoly(iframeUrl, referer);
       if (m3u8) {
@@ -172,18 +173,10 @@ async function resolveIframe(iframeUrl, referer) {
     if (!res.ok) return streams;
     var html = await res.text();
 
-    var m3u8Match = html.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i) ||
-                    html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
-    if (m3u8Match && m3u8Match[1]) {
-      streams.push(makeStream(m3u8Match[1], "Fast Player [DiziKorea]", "1080p", true, {
-        "User-Agent": USER_AGENT,
-        "Referer": iframeUrl
-      }));
-    }
-
-    var mp4Match = html.match(/["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i);
-    if (mp4Match && mp4Match[1]) {
-      streams.push(makeStream(mp4Match[1], "MP4 Player [DiziKorea]", "1080p", false, {
+    var m = html.match(/file:\s*["']([^"']+\.m3u8[^"']*)["']/i) ||
+            html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
+    if (m && m[1]) {
+      streams.push(makeStream(m[1], "DiziKorea Player", "1080p", true, {
         "User-Agent": USER_AGENT,
         "Referer": iframeUrl
       }));
@@ -193,113 +186,105 @@ async function resolveIframe(iframeUrl, referer) {
 }
 
 async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
-  var tmdb = await fetchTmdbDetails(tmdbId, mediaType);
-  if (!tmdb) return [];
+  var type = mediaType === "movie" ? "movie" : "tv";
+  var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=tr-TR").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+  var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
 
-  var isTv = mediaType === "tv";
+  var titleTr = resTr ? (resTr.title || resTr.name) : "";
+  var titleEn = resEn ? (resEn.title || resEn.name) : "";
+  var origTitle = (resEn && resEn.original_title) || (resEn && resEn.original_name) || "";
+
+  var isTv = mediaType === "tv" || mediaType === "series";
   var sNum = parseInt(seasonNum, 10) || 1;
   var eNum = parseInt(episodeNum, 10) || 1;
 
-  var titlesToSearch = [tmdb.titleTr, tmdb.titleEn, tmdb.originalTitle].filter(function(v, i, self) {
+  var titlesToSearch = [titleTr, titleEn, origTitle].filter(function(v, i, self) {
     return v && self.indexOf(v) === i;
   });
 
-  for (var d = 0; d < DOMAINS.length; d++) {
-    var base = DOMAINS[d];
-    for (var t = 0; t < titlesToSearch.length; t++) {
-      var query = titlesToSearch[t];
-      var searchItems = await searchDiziKorea(query, base);
-      if (!searchItems || searchItems.length === 0) continue;
+  for (var t = 0; t < titlesToSearch.length; t++) {
+    var query = titlesToSearch[t];
+    var searchItems = await searchDiziKorea(query);
+    if (!searchItems || searchItems.length === 0) continue;
 
-      var bestMatch = null;
-      var bestScore = 999;
-      var normTr = normalizeTitle(tmdb.titleTr);
-      var normEn = normalizeTitle(tmdb.titleEn);
+    var bestMatch = null;
+    var bestScore = 999;
+    var normTr = normalizeTitle(titleTr);
+    var normEn = normalizeTitle(titleEn);
 
-      for (var i = 0; i < searchItems.length; i++) {
-        var it = searchItems[i];
-        var itemNorm = normalizeTitle(it.title);
-        var dist = Math.min(levenshteinDistance(itemNorm, normTr), levenshteinDistance(itemNorm, normEn));
-        if (itemNorm.indexOf(normTr) !== -1 || itemNorm.indexOf(normEn) !== -1) {
-          dist = Math.floor(dist / 2);
-        }
-        if (dist < bestScore) {
-          bestScore = dist;
-          bestMatch = it;
-        }
+    for (var i = 0; i < searchItems.length; i++) {
+      var it = searchItems[i];
+      if (isTv && it.isMovie) continue;
+      if (!isTv && !it.isMovie) continue;
+      var itemNorm = normalizeTitle(it.title);
+      var dist = Math.min(levenshteinDistance(itemNorm, normTr), levenshteinDistance(itemNorm, normEn));
+      if (itemNorm.indexOf(normTr) !== -1 || itemNorm.indexOf(normEn) !== -1) {
+        dist = Math.floor(dist / 2);
       }
-
-      if (!bestMatch || bestScore > 10) continue;
-
-      var epUrl = bestMatch.url;
-      if (isTv) {
-        try {
-          var seriesRes = await fetch(bestMatch.url, { headers: BASE_HEADERS });
-          if (seriesRes.ok) {
-            var sHtml = await seriesRes.text();
-            var $s = cheerio.load(sHtml);
-            var epCandidate = null;
-
-            $s("div.episode-list").each(function(sIdx, sEl) {
-              var sAttr = parseInt($s(sEl).attr("data-season"), 10) || 1;
-              if (sAttr === sNum) {
-                $s(sEl).find("a.episode-item").each(function(eIdx, eEl) {
-                  var epNumber = parseInt($s(eEl).find("span.ep-number").text().trim(), 10) || (eIdx + 1);
-                  if (epNumber === eNum) {
-                    var h = $s(eEl).attr("href");
-                    if (h) epCandidate = h.startsWith("http") ? h : base + (h.startsWith("/") ? "" : "/") + h;
-                  }
-                });
-              }
-            });
-
-            if (!epCandidate) {
-              $s("a.episode-item").each(function(eIdx, eEl) {
-                var epNumber = parseInt($s(eEl).find("span.ep-number").text().trim(), 10) || (eIdx + 1);
-                if (epNumber === eNum && sNum === 1) {
-                  var h = $s(eEl).attr("href");
-                  if (h) epCandidate = h.startsWith("http") ? h : base + (h.startsWith("/") ? "" : "/") + h;
-                }
-              });
-            }
-
-            if (epCandidate) epUrl = epCandidate;
-          }
-        } catch (e) {}
+      if (dist < bestScore) {
+        bestScore = dist;
+        bestMatch = it;
       }
+    }
 
-      var streams = [];
+    if (!bestMatch || bestScore > 10) continue;
+
+    var targetUrl = bestMatch.url;
+    if (isTv) {
       try {
-        var pageRes = await fetch(epUrl, { headers: BASE_HEADERS });
+        var pageRes = await fetch(bestMatch.url, { headers: BASE_HEADERS });
         if (pageRes.ok) {
           var pHtml = await pageRes.text();
           var $p = cheerio.load(pHtml);
+          var epCandidate = null;
 
-          var iframes = [];
-          $p("div.player-source iframe, iframe").each(function(idx, el) {
-            var src = $p(el).attr("data-src") || $p(el).attr("src");
-            if (src && iframes.indexOf(src) === -1) {
-              iframes.push(src);
+          $p("div.episode-list a.episode-item, a.episode-item").each(function(_, el) {
+            var href = $p(el).attr("href");
+            if (!href) return;
+            var sM = href.match(/sezon-(\d+)/i);
+            var eM = href.match(/bolum-(\d+)/i);
+            if (sM && eM && parseInt(sM[1], 10) === sNum && parseInt(eM[1], 10) === eNum) {
+              epCandidate = href.startsWith("http") ? href : BASE_URL + (href.startsWith("/") ? "" : "/") + href;
             }
           });
 
-          for (var ii = 0; ii < iframes.length; ii++) {
-            var ifr = iframes[ii];
-            if (ifr.startsWith("//")) ifr = "https:" + ifr;
-            else if (ifr.startsWith("/")) ifr = base + ifr;
-
-            var resS = await resolveIframe(ifr, epUrl);
-            for (var si = 0; si < resS.length; si++) {
-              streams.push(resS[si]);
-            }
+          if (epCandidate) {
+            targetUrl = epCandidate;
+          } else {
+            targetUrl = bestMatch.url.replace(/\/$/, "") + "/sezon-" + sNum + "/bolum-" + eNum;
           }
         }
-      } catch (err) {}
-
-      if (streams.length > 0) {
-        return streams;
-      }
+      } catch (e) {}
     }
+
+    try {
+      var epRes = await fetch(targetUrl, { headers: BASE_HEADERS });
+      if (epRes.ok) {
+        var epHtml = await epRes.text();
+        var $ep = cheerio.load(epHtml);
+        var iframes = [];
+
+        $ep("div.player-source iframe, iframe").each(function(_, el) {
+          var src = $ep(el).attr("data-src") || $ep(el).attr("src");
+          if (src) {
+            var fullSrc = src.startsWith("http") ? src : (src.startsWith("//") ? "https:" + src : BASE_URL + src);
+            if (iframes.indexOf(fullSrc) === -1) iframes.push(fullSrc);
+          }
+        });
+
+        var streams = [];
+        for (var ii = 0; ii < iframes.length; ii++) {
+          var resS = await resolveIframe(iframes[ii], targetUrl);
+          for (var si = 0; si < resS.length; si++) {
+            streams.push(resS[si]);
+          }
+        }
+
+        if (streams.length > 0) {
+          return streams;
+        }
+      }
+    } catch (e) {}
   }
 
   return [];

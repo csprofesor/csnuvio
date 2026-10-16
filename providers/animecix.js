@@ -105,10 +105,11 @@ async function searchAnimeciX(query) {
       var list = json.results || [];
       for (var i = 0; i < list.length; i++) {
         var it = list[i];
-        if (it.title && it.id) {
+        var name = it.name || it.title || it.name_english || it.name_romanji;
+        if (name && it.id) {
           results.push({
             id: it.id,
-            title: sanitizeText(it.title)
+            title: sanitizeText(name)
           });
         }
       }
@@ -199,7 +200,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
             var videos = relJson.videos || [];
             for (var vi = 0; vi < videos.length; vi++) {
               var vid = videos[vi];
-              if (vid.seasonNum == sNum && vid.episodeNum == eNum) {
+              var vidS = vid.season_num || vid.seasonNum || 1;
+              var vidE = vid.episode_num || vid.episodeNum || 1;
+              if (vidS == sNum && vidE == eNum) {
                 targetVideoUrl = vid.url;
                 break;
               }
