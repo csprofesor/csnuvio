@@ -187,10 +187,17 @@ function searchSite(title, isMovie) {
 
             results.forEach(function(item) {
               if (!item.used_slug) return;
+              if (item.used_slug.indexOf("filmserisi/") !== -1 || item.used_slug.indexOf("kategori/") !== -1 || item.used_slug.indexOf("seri/") !== -1) return;
               var href = domain + "/" + item.used_slug;
               var name = item.object_name || item.object_alternative_name || "";
               var normName = normalize(name);
               var dist = distance(normName, normTitle);
+              if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1) {
+                dist = Math.floor(dist / 2);
+              }
+              if (dist > 5 && normName.split(" ").some(function(w) { return w.length > 2 && normTitle.indexOf(w) !== -1; })) {
+                dist = 5;
+              }
               candidates.push({ href: href, name: name, score: dist, domain: domain });
             });
 
@@ -199,8 +206,8 @@ function searchSite(title, isMovie) {
               return candidates[0];
             }
           } catch (_) {}
-          return null;
-        }).catch(function() { return null; });
+          return tryDomain(idx + 1);
+        }).catch(function() { return tryDomain(idx + 1); });
       }
 
       // Classic API fallback
@@ -339,12 +346,22 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     if (!info || !info.title) return [];
 
     var searchNames = [info.title];
-    if (info.originalTitle && info.originalTitle !== info.title) searchNames.push(info.originalTitle);
+    if (info.title.indexOf(":") !== -1) {
+      searchNames.push(info.title.split(":")[0].trim());
+    }
+    if (info.originalTitle && info.originalTitle !== info.title) {
+      searchNames.push(info.originalTitle);
+      if (info.originalTitle.indexOf(":") !== -1) {
+        searchNames.push(info.originalTitle.split(":")[0].trim());
+      }
+    }
 
     function tryName(i) {
       if (i >= searchNames.length) return Promise.resolve(null);
       return searchSite(searchNames[i], isMovie).then(function(res) {
-        if (res && res.href) return res;
+        if (res && res.href) {
+          if (res.score <= 12) return res;
+        }
         return tryName(i + 1);
       }).catch(function() { return tryName(i + 1); });
     }
