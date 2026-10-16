@@ -1,8 +1,8 @@
 {
   "id": "csnuvio-repo",
   "name": "CSNuvio Repo",
-  "version": "1.0.3",
-  "description": "CSNuvio Nuvio eklenti deposu",
+  "version": "1.0.4",
+  "description": "CSNuvio Nuvio eklenti deposu (CloudStream GSRepo Port)",
   "author": "gs",
   "manifestVersion": 1,
   "pluginVersion": 1,
@@ -11,60 +11,349 @@
       "id": "csnuvio-dizimom",
       "name": "DiziMom",
       "description": "DiziMom Türkçe dizi kaynakları",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": "gs",
-      "supportedTypes": [
-        "tv"
-      ],
+      "supportedTypes": ["tv"],
       "filename": "providers/dizimom.js",
       "enabled": true,
-      "formats": [
-        "m3u8",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "tr"
-      ]
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
     },
     {
       "id": "csnuvio-dizipal",
       "name": "DiziPal",
       "description": "DiziPal Türkçe dizi ve film kaynakları",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": "gs",
-      "supportedTypes": [
-        "tv",
-        "movie"
-      ],
+      "supportedTypes": ["tv", "movie"],
       "filename": "providers/dizipal.js",
       "enabled": true,
-      "formats": [
-        "m3u8",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "tr"
-      ]
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
     },
     {
       "id": "csnuvio-hdfilmcehennemi",
       "name": "HDFilmCehennemi",
       "description": "HDFilmCehennemi Türkçe film ve dizi kaynakları",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": "gs",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
+      "supportedTypes": ["movie", "tv"],
       "filename": "providers/hdfilmcehennemi.js",
       "enabled": true,
-      "formats": [
-        "m3u8",
-        "mp4"
-      ],
-      "contentLanguage": [
-        "tr"
-      ]
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-filmmodu",
+      "name": "FilmModu",
+      "description": "FilmModu Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/filmmodu.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-filmmakinesi",
+      "name": "FilmMakinesi",
+      "description": "FilmMakinesi Türkçe film ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/filmmakinesi.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-filmkovasi",
+      "name": "FilmKovası",
+      "description": "FilmKovası Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/filmkovasi.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-setfilmizle",
+      "name": "SetFilmİzle",
+      "description": "SetFilmİzle Türkçe film ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/setfilmizle.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-fullhdfilm",
+      "name": "FullHDFilm",
+      "description": "FullHDFilm Türkçe film ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/fullhdfilm.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-jetfilmizle",
+      "name": "JetFilmizle",
+      "description": "JetFilmizle Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/jetfilmizle.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-webteizle",
+      "name": "Webteİzle",
+      "description": "Webteİzle Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/webteizle.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-kultfilmler",
+      "name": "KültFilmler",
+      "description": "KültFilmler Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/kultfilmler.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-tavsiyefilmizle",
+      "name": "TavsiyeFilmİzle",
+      "description": "TavsiyeFilmİzle Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/tavsiyefilmizle.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-sinemacx",
+      "name": "SinemaCX",
+      "description": "SinemaCX Türkçe film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/sinemacx.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-hintfilmizle",
+      "name": "HintFilmİzle",
+      "description": "HintFilmİzle Hint ve yabancı film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie"],
+      "filename": "providers/hintfilmizle.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-dizibox",
+      "name": "DiziBox",
+      "description": "DiziBox Türkçe yabancı dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv"],
+      "filename": "providers/dizibox.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-dizilla",
+      "name": "Dizilla",
+      "description": "Dizilla Türkçe yabancı dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv"],
+      "filename": "providers/dizilla.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-dizigom",
+      "name": "DiziGom",
+      "description": "DiziGom Türkçe dizi ve film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/dizigom.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-sezonlukdizi",
+      "name": "SezonlukDizi",
+      "description": "SezonlukDizi Türkçe yabancı dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv"],
+      "filename": "providers/sezonlukdizi.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-yabancidizi",
+      "name": "YabancıDizi",
+      "description": "YabancıDizi Türkçe dizi ve film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/yabancidizi.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-ddizi",
+      "name": "DDizi",
+      "description": "DDizi yerli ve yabancı dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv"],
+      "filename": "providers/ddizi.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-dizikorea",
+      "name": "DiziKorea",
+      "description": "DiziKorea Asya ve Kore dizileri kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/dizikorea.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-dizimag",
+      "name": "DiziMag",
+      "description": "DiziMag Türkçe dizi ve film kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/dizimag.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-selcukflix",
+      "name": "SelçukFlix",
+      "description": "SelçukFlix film ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/selcukflix.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-sinewix",
+      "name": "SineWix",
+      "description": "SineWix film, dizi ve anime kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/sinewix.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-sinematv",
+      "name": "SinemaTV",
+      "description": "SinemaTV film ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/sinematv.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-animecix",
+      "name": "AnimeciX",
+      "description": "AnimeciX Türkçe anime kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/animecix.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-anizm",
+      "name": "Anizm",
+      "description": "Anizm Türkçe anime kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/anizm.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-belgeselx",
+      "name": "BelgeselX",
+      "description": "BelgeselX Türkçe belgesel ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["tv", "movie"],
+      "filename": "providers/belgeselx.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-watch2movies",
+      "name": "Watch2Movies",
+      "description": "Watch2Movies İngilizce film ve dizi kaynakları",
+      "version": "1.0.4",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "providers/watch2movies.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["en"]
     }
   ]
 }
