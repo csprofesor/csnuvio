@@ -19,7 +19,7 @@ function sanitizeText(str) {
   if (!str) return "";
   return str.replace(/&#(\d+);/g, function(match, dec) {
     return String.fromCharCode(dec);
-  }).replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#039;/g, "'").trim();
+  }).replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#039;/g, "'").replace(/<[^>]+>/g, "").trim();
 }
 
 function normalizeTitle(str) {
@@ -71,26 +71,73 @@ function makeStream(url, label, quality, isHls, headers) {
 async function searchBelgeselX(query) {
   var results = [];
   try {
-    var categories = ["tarih-belgeselleri", "turk-tarihi-belgeselleri", "bilim-belgeselleri", "doga-belgeselleri", "seri-belgeseller"];
-    for (var c = 0; c < categories.length; c++) {
-      var catUrl = BASE_URL + "/ajax_konukat.php?url=" + categories[c] + "&page=1";
-      var res = await fetch(catUrl, { headers: BASE_HEADERS });
-      if (res.ok) {
-        var html = await res.text();
-        var $ = cheerio.load(html);
-        $("a.px-card").each(function(_, el) {
-          var href = $(el).attr("href");
-          var title = $(el).find(".px-card-title").text().trim();
-          if (href && title) {
-            results.push({
-              title: sanitizeText(title),
-              url: href.startsWith("http") ? href : BASE_URL + href
-            });
+    var cx = "016376594590146270301:iwmy65ijgrm";
+    var tokenRes = await fetch("https://cse.google.com/cse.js?cx=" + cx);
+    if (tokenRes.ok) {
+      var tokenText = await tokenRes.text();
+      var cseLibVersion = tokenText.match(/cselibVersion": "([^"]+)"/)?.[1] || "dc6f600a0d4404e5";
+      var cseToken = tokenText.match(/cse_token": "([^"]+)"/)?.[1];
+
+      if (cseToken) {
+        var searchUrl = "https://cse.google.com/cse/element/v1?rsz=filtered_cse&num=10&hl=tr&source=gcsc&cselibv=" + cseLibVersion + "&cx=" + cx + "&q=" + encodeURIComponent(query) + "&safe=off&cse_tok=" + cseToken + "&callback=google.search.cse.api9969&rurl=https%3A%2F%2Fbelgeselx.com%2F";
+        var sRes = await fetch(searchUrl, { headers: { "User-Agent": USER_AGENT } });
+        if (sRes.ok) {
+          var sText = await sRes.text();
+          var jsonStr = sText.substring(sText.indexOf("{"), sText.lastIndexOf("}") + 1);
+          if (jsonStr) {
+            var json = JSON.parse(jsonStr);
+            var items = json.results || [];
+            for (var i = 0; i < items.length; i++) {
+              var item = items[i];
+              var rawUrl = item.formattedUrl || item.clicktrackUrl || "";
+              var titleNoFormatting = item.titleNoFormatting || item.title || "";
+
+              var urlMatch = rawUrl.match(/https:\/\/belgeselx\.com\/[^\s&"']+/);
+              if (!urlMatch && item.clicktrackUrl) {
+                urlMatch = item.clicktrackUrl.match(/&q=(https:\/\/belgeselx\.com\/[^\s&"']+)/);
+                if (urlMatch) urlMatch[0] = decodeURIComponent(urlMatch[1]);
+              }
+
+              if (urlMatch && urlMatch[0]) {
+                var cleanUrl = urlMatch[0].replace(/<[^>]+>/g, "").trim();
+                if (cleanUrl.indexOf("/belgeseldizi/") !== -1 || cleanUrl.indexOf("/belgesel/") !== -1) {
+                  results.push({
+                    title: sanitizeText(titleNoFormatting.replace(/\s*-\s*BelgeselX.*/i, "").replace(/\s*İzle.*/i, "")),
+                    url: cleanUrl
+                  });
+                }
+              }
+            }
           }
-        });
+        }
       }
     }
   } catch (e) {}
+
+  if (results.length === 0) {
+    try {
+      var categories = ["tarih-belgeselleri", "turk-tarihi-belgeselleri", "bilim-belgeselleri", "doga-belgeselleri"];
+      for (var c = 0; c < categories.length; c++) {
+        var catUrl = BASE_URL + "/ajax_konukat.php?url=" + categories[c] + "&page=1";
+        var res = await fetch(catUrl, { headers: BASE_HEADERS });
+        if (res.ok) {
+          var html = await res.text();
+          var $ = cheerio.load(html);
+          $("a.px-card").each(function(_, el) {
+            var href = $(el).attr("href");
+            var title = $(el).find(".px-card-title").text().trim();
+            if (href && title) {
+              results.push({
+                title: sanitizeText(title),
+                url: href.startsWith("http") ? href : BASE_URL + href
+              });
+            }
+          });
+        }
+      }
+    } catch (errCat) {}
+  }
+
   return results;
 }
 
@@ -226,7 +273,7 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
           for (var pei = 0; pei < playerEndpoints.length; pei++) {
             var resStreams = await resolvePlayerEndpoint(playerEndpoints[pei], docUrl);
             for (var rsi = 0; rsi < resStreams.length; rsi++) {
-              resStreams[rsi].title = titleTr + " • Türkçe Dublaj (" + (resStreams[rsi].quality || "1080p") + ")" + (rsi > 0 ? " #" + (rsi + 1) : "");
+              resStreams[rsi].title = bestMatch.title + " • Türkçe Dublaj (" + (resStreams[rsi].quality || "1080p") + ")" + (rsi > 0 ? " #" + (rsi + 1) : "");
               streams.push(resStreams[rsi]);
             }
           }
