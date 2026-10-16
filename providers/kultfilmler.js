@@ -2,300 +2,224 @@
 
 var cheerio = require("cheerio-without-node-native");
 
-var BASE_URL = "https://kultfilmler.net";
+var DOMAINS = [
+  "https://kultfilmler.net"
+];
+var BASE_URL = DOMAINS[0];
+var PROVIDER_NAME = "KültFilmler";
+
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-var HEADERS = {
+var BASE_HEADERS = {
   "User-Agent": USER_AGENT,
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Referer": BASE_URL + "/",
   "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
 };
 
-function abs(url, base) {
-  if (!url) return null;
-  if (url.startsWith("//")) return "https:" + url;
-  try { return new URL(url, base || BASE_URL).toString(); }
-  catch (_) { return url; }
+function sanitizeText(str) {
+  if (!str) return "";
+  return str.replace(/&#(\d+);/g, function(match, dec) {
+    return String.fromCharCode(dec);
+  }).replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#039;/g, "'").trim();
 }
 
-function getText(url, options) {
-  options = options || {};
-  var headers = Object.assign({}, HEADERS, options.headers || {});
-  return fetch(url, {
-    method: options.method || "GET",
-    headers: headers,
-    body: options.body,
-    redirect: "follow"
-  }).then(function(r) {
-    if (!r.ok) throw new Error("HTTP " + r.status + " on " + url);
-    return r.text();
-  });
-}
-
-function postForm(url, data, referer) {
-  var params = new URLSearchParams();
-  for (var k in data) {
-    params.append(k, data[k]);
-  }
-  var headers = Object.assign({}, HEADERS, {
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": referer || BASE_URL + "/"
-  });
-  return fetch(url, {
-    method: "POST",
-    headers: headers,
-    body: params.toString()
-  }).then(function(r) {
-    if (!r.ok) throw new Error("HTTP " + r.status + " on " + url);
-    return r.text();
-  });
-}
-
-function sanitizeText(s) {
-  return (s || "").replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, "").trim();
-}
-
-function normalize(s) {
-  return (s || "").toLowerCase()
-    .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, "")
+function normalizeTitle(str) {
+  if (!str) return "";
+  return str.toLowerCase()
     .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s")
     .replace(/ı/g, "i").replace(/ö/g, "o").replace(/ç/g, "c")
-    .replace(/[^a-z0-9]+/g, " ").trim();
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function distance(a, b) {
-  a = normalize(a); b = normalize(b);
-  var d = [];
-  for (var i = 0; i <= a.length; i++) { d[i] = [i]; }
-  for (var j = 0; j <= b.length; j++) d[0][j] = j;
-  for (var x = 1; x <= a.length; x++) {
-    for (var y = 1; y <= b.length; y++) {
-      d[x][y] = Math.min(d[x - 1][y] + 1, d[x][y - 1] + 1, d[x - 1][y - 1] + (a[x - 1] === b[y - 1] ? 0 : 1));
+function levenshteinDistance(s1, s2) {
+  var a = s1 || "";
+  var b = s2 || "";
+  var matrix = [];
+  for (var i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (var j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (var i = 1; i <= b.length; i++) {
+    for (var j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+        );
+      }
     }
   }
-  return d[a.length][b.length];
+  return matrix[b.length][a.length];
 }
 
-function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
-  var apiKey = "1c29a5198ee1854bd5eb45dbe8d17d92";
-  var endpoint = type === "tv" || type === "series" ? "tv" : "movie";
-  var mainUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=tr-TR";
-
-  return fetch(mainUrl).then(function(r) { return r.json(); }).then(function(d) {
-    var info = {
-      title: sanitizeText(endpoint === "tv" ? d.name : d.title),
-      originalTitle: sanitizeText(endpoint === "tv" ? d.original_name : d.original_title),
-      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4)
-    };
-
-    if (endpoint === "tv" && seasonNum && episodeNum) {
-      var epUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "/episode/" + episodeNum + "?api_key=" + apiKey + "&language=tr-TR";
-      return fetch(epUrl).then(function(er) { return er.json(); }).then(function(epData) {
-        info.episodeTitle = sanitizeText(epData.name || "");
-        return info;
-      }).catch(function() { return info; });
-    }
-
-    return info;
-  }).catch(function() { return null; });
-}
-
-function searchSite(title) {
-  var cleanTitle = sanitizeText(title);
-  var q = encodeURIComponent(cleanTitle);
-  var searchUrl = BASE_URL + "/?s=" + q;
-
-  return getText(searchUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
-    var $ = cheerio.load(html);
-    var candidates = [];
-    var normTitle = normalize(cleanTitle);
-
-    $("a.mcard, article.mcard, div.mcard").each(function(_, el) {
-      var a = $(el).is("a") ? $(el) : $(el).find("a").first();
-      var href = abs(a.attr("href"));
-      if (!href) return;
-
-      var name = sanitizeText(a.find("div.mtx h3").text() || a.find("img.pimg").attr("alt") || a.attr("title") || "");
-      if (!name) return;
-
-      var normName = normalize(name);
-      var dist = distance(normName, normTitle);
-      if (normName.indexOf(normTitle) !== -1 || normTitle.indexOf(normName) !== -1 || dist <= 6) {
-        candidates.push({ href: href, name: name, score: dist });
-      }
-    });
-
-    candidates.sort(function(a, b) { return a.score - b.score; });
-    return candidates.length ? candidates[0].href : null;
-  }).catch(function() { return null; });
-}
-
-function findEpisodeUrl(seriesUrl, seasonNum, episodeNum) {
-  return getText(seriesUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
-    var $ = cheerio.load(html);
-    var match = null;
-
-    var p1 = new RegExp(seasonNum + "-sezon-" + episodeNum + "-bolum", "i");
-    var p2 = new RegExp("/sezon-" + seasonNum + "/bolum-" + episodeNum, "i");
-    var pTxt = new RegExp(seasonNum + "\\.?\\s*sezon\\s*" + episodeNum + "\\.?\\s*bölüm", "i");
-
-    $("a[href*='bolum']").each(function(_, el) {
-      if (match) return;
-      var href = abs($(el).attr("href"), seriesUrl);
-      var txt = sanitizeText($(el).text());
-      if (p1.test(href) || p2.test(href) || pTxt.test(txt)) {
-        match = href;
-      }
-    });
-
-    return match || seriesUrl;
-  }).catch(function() { return seriesUrl; });
-}
-
-function resolvePlayerHtml(iframeUrl, referer) {
-  return getText(iframeUrl, { headers: { Referer: referer || BASE_URL + "/" } }).then(function(html) {
-    var urls = [];
-
-    var fileMatches = html.match(/file\s*:\s*["']([^"']+)["']/g);
-    if (fileMatches) {
-      fileMatches.forEach(function(m) {
-        var uMatch = m.match(/file\s*:\s*["']([^"']+)["']/);
-        if (uMatch) {
-          var u = uMatch[1].replace(/\\\//g, "/");
-          if (u.startsWith("//")) u = "https:" + u;
-          if (urls.indexOf(u) === -1) urls.push(u);
-        }
-      });
-    }
-
-    var m3u8Matches = html.match(/https?:\/\/[^"'`\s\\]+\.m3u8[^\s"'`\\]*/gi);
-    if (m3u8Matches) {
-      m3u8Matches.forEach(function(u) {
-        var clean = u.replace(/\\\//g, "/");
-        if (urls.indexOf(clean) === -1) urls.push(clean);
-      });
-    }
-
-    var mp4Matches = html.match(/https?:\/\/[^"'`\s\\]+\.mp4[^\s"'`\\]*/gi);
-    if (mp4Matches) {
-      mp4Matches.forEach(function(u) {
-        var clean = u.replace(/\\\//g, "/");
-        if (urls.indexOf(clean) === -1) urls.push(clean);
-      });
-    }
-
-    return urls;
-  }).catch(function() { return []; });
-}
-
-function resolveKultFilmlerSources(pageUrl) {
-  return getText(pageUrl, { headers: { Referer: BASE_URL + "/" } }).then(function(html) {
-    var $ = cheerio.load(html);
-    var iframes = [];
-
-    function addIfr(u) {
-      if (!u) return;
-      var fixed = abs(u, pageUrl);
-      if (fixed && fixed.indexOf("youtube.com") === -1 && fixed.indexOf("youtu.be") === -1) {
-        if (iframes.indexOf(fixed) === -1) iframes.push(fixed);
-      }
-    }
-
-    addIfr($("div#player iframe").first().attr("src"));
-    addIfr($("div.kf-embed iframe").first().attr("src"));
-
-    var srcJson = $("script#kf-srcdata").html();
-    if (srcJson) {
-      var matches = srcJson.match(/src=\\?"([^"\\]+)/g);
-      if (matches) {
-        matches.forEach(function(m) {
-          var clean = m.replace(/^src=\\?"/, "").replace(/\\/g, "");
-          addIfr(clean);
-        });
-      }
-    }
-
-    $("iframe").each(function(_, el) {
-      addIfr($(el).attr("src") || $(el).attr("data-src"));
-    });
-
-    var resolvePromises = iframes.map(function(u) {
-      return resolvePlayerHtml(u, pageUrl);
-    });
-
-    return Promise.all(resolvePromises).then(function(resultsArray) {
-      var all = [];
-      resultsArray.forEach(function(arr) {
-        arr.forEach(function(u) {
-          if (u && all.indexOf(u) === -1) all.push(u);
-        });
-      });
-      return all;
-    });
-  }).catch(function() { return []; });
-}
-
-function makeStream(url, title, index) {
-  var lower = url.toLowerCase();
-  var quality = "HD";
-  var q = lower.match(/(?:2160|1440|1080|720|576|480|360)p/);
-  if (q) quality = q[0];
-  else if (lower.indexOf("4k") !== -1) quality = "4K";
-
-  var isHls = lower.indexOf(".m3u8") !== -1;
+function makeStream(url, label, quality, isHls, headers) {
   return {
-    name: "KultFilmler",
-    title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
+    name: PROVIDER_NAME,
+    title: label || "KültFilmler",
     url: url,
-    quality: quality,
+    quality: quality || "1080p",
     type: isHls ? "hls" : "mp4",
-    headers: {
-      "Referer": BASE_URL + "/",
-      "User-Agent": USER_AGENT
+    headers: headers || {
+      "User-Agent": USER_AGENT,
+      "Referer": BASE_URL + "/"
     },
     provider: "kultfilmler"
   };
 }
 
-function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
-  return tmdbDetails(tmdbId, mediaType, seasonNum, episodeNum).then(function(info) {
-    if (!info || !info.title) return [];
+async function searchKultFilmler(query) {
+  var results = [];
+  try {
+    var searchUrl = BASE_URL + "/?s=" + encodeURIComponent(query);
+    var res = await fetch(searchUrl, { headers: BASE_HEADERS });
+    if (res.ok) {
+      var html = await res.text();
+      var $ = cheerio.load(html);
+      $("a.mcard, article.card, a[href*='filmler']").each(function(_, el) {
+        var href = $(el).attr("href");
+        var title = $(el).find("div.mtx h3").text().trim() || $(el).find("img.pimg").attr("alt") || $(el).attr("title");
+        if (href && title && href.indexOf(BASE_URL) !== -1) {
+          results.push({
+            title: sanitizeText(title),
+            url: href,
+            isMovie: href.indexOf("/dizi/") === -1
+          });
+        }
+      });
+    }
+  } catch (e) {}
+  return results;
+}
 
-    var searchNames = [info.title];
-    if (info.originalTitle && info.originalTitle !== info.title) searchNames.push(info.originalTitle);
+async function resolveVidPapiPlayer(iframeUrl) {
+  var streams = [];
+  try {
+    var videoId = iframeUrl.split("/").filter(Boolean).pop();
+    var pRes = await fetch(iframeUrl, { headers: BASE_HEADERS });
+    var cookie = pRes.headers.get("set-cookie") || "";
 
-    function trySearch(i) {
-      if (i >= searchNames.length) return Promise.resolve(null);
-      return searchSite(searchNames[i]).then(function(url) {
-        if (url) return url;
-        return trySearch(i + 1);
-      }).catch(function() { return trySearch(i + 1); });
+    var apiRes = await fetch("https://vidpapi.xyz/player/index.php?data=" + videoId + "&do=getVideo", {
+      method: "POST",
+      headers: {
+        "User-Agent": USER_AGENT,
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Referer": iframeUrl,
+        "Cookie": cookie
+      },
+      body: "data=" + videoId + "&do=getVideo"
+    });
+
+    if (apiRes.ok) {
+      var apiData = await apiRes.json();
+      var videoUrl = apiData.securedLink || apiData.videoSource;
+      if (videoUrl) {
+        streams.push(makeStream(videoUrl, "VidPapi Player", "1080p", videoUrl.indexOf(".m3u8") !== -1, {
+          "User-Agent": USER_AGENT,
+          "Referer": BASE_URL + "/"
+        }));
+      }
+    }
+  } catch (e) {}
+  return streams;
+}
+
+async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  var type = mediaType === "movie" ? "movie" : "tv";
+  var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=tr-TR").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+  var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+
+  var titleTr = resTr ? (resTr.title || resTr.name) : "";
+  var titleEn = resEn ? (resEn.title || resEn.name) : "";
+  var origTitle = (resEn && resEn.original_title) || (resEn && resEn.original_name) || "";
+
+  var isTv = mediaType === "tv" || mediaType === "series";
+  var sNum = parseInt(seasonNum, 10) || 1;
+  var eNum = parseInt(episodeNum, 10) || 1;
+
+  var titlesToSearch = [titleTr, titleEn, origTitle].filter(function(v, i, self) {
+    return v && self.indexOf(v) === i;
+  });
+
+  for (var t = 0; t < titlesToSearch.length; t++) {
+    var query = titlesToSearch[t];
+    var searchItems = await searchKultFilmler(query);
+    if (!searchItems || searchItems.length === 0) continue;
+
+    var bestMatch = null;
+    var bestScore = 999;
+    var normTr = normalizeTitle(titleTr);
+    var normEn = normalizeTitle(titleEn);
+
+    for (var i = 0; i < searchItems.length; i++) {
+      var it = searchItems[i];
+      if (isTv && it.isMovie) continue;
+      if (!isTv && !it.isMovie) continue;
+      var itemNorm = normalizeTitle(it.title);
+      var dist = Math.min(levenshteinDistance(itemNorm, normTr), levenshteinDistance(itemNorm, normEn));
+      if (itemNorm.indexOf(normTr) !== -1 || itemNorm.indexOf(normEn) !== -1) {
+        dist = Math.floor(dist / 2);
+      }
+      if (dist < bestScore) {
+        bestScore = dist;
+        bestMatch = it;
+      }
     }
 
-    return trySearch(0).then(function(itemUrl) {
-      if (!itemUrl) return [];
+    if (!bestMatch || bestScore > 10) continue;
 
-      var targetPromise = (mediaType === "tv" || mediaType === "series") && seasonNum && episodeNum
-        ? findEpisodeUrl(itemUrl, seasonNum, episodeNum)
-        : Promise.resolve(itemUrl);
+    var targetUrl = bestMatch.url;
+    try {
+      var mRes = await fetch(targetUrl, { headers: BASE_HEADERS });
+      if (mRes.ok) {
+        var mHtml = await mRes.text();
+        var $m = cheerio.load(mHtml);
+        var iframes = [];
 
-      return targetPromise.then(function(pageUrl) {
-        if (!pageUrl) pageUrl = itemUrl;
-
-        return resolveKultFilmlerSources(pageUrl).then(function(streamUrls) {
-          var label = info.title;
-          if (info.episodeTitle) label += " - " + info.episodeTitle;
-          else if (seasonNum && episodeNum) label += " S" + seasonNum + "E" + episodeNum;
-
-          return streamUrls.map(function(u, idx) {
-            return makeStream(u, label, idx);
-          });
+        $m("div#player iframe, div.kf-embed iframe, iframe").each(function(_, el) {
+          var src = $m(el).attr("src") || $m(el).attr("data-src");
+          if (src) {
+            var full = src.startsWith("//") ? "https:" + src : (src.startsWith("http") ? src : BASE_URL + src);
+            if (iframes.indexOf(full) === -1) iframes.push(full);
+          }
         });
-      });
-    });
-  }).catch(function() {
-    return [];
-  });
+
+        var srcJson = $m("script#kf-srcdata").html();
+        if (srcJson) {
+          var matches = srcJson.match(/src=\\?"([^"\\]+)/g) || [];
+          for (var mi = 0; mi < matches.length; mi++) {
+            var u = matches[mi].replace(/src=\\?"/, "").replace(/\\/g, "");
+            if (u.startsWith("//")) u = "https:" + u;
+            if (u.startsWith("http") && iframes.indexOf(u) === -1) iframes.push(u);
+          }
+        }
+
+        var streams = [];
+        for (var ii = 0; ii < iframes.length; ii++) {
+          var ifr = iframes[ii];
+          if (ifr.indexOf("vidpapi") !== -1) {
+            var pStreams = await resolveVidPapiPlayer(ifr);
+            for (var psi = 0; psi < pStreams.length; psi++) {
+              pStreams[psi].title = titleTr + " • Türkçe Dublaj / Altyazılı (1080p)" + (psi > 0 ? " #" + (psi + 1) : "");
+              streams.push(pStreams[psi]);
+            }
+          } else if (ifr.indexOf(".m3u8") !== -1 || ifr.indexOf(".mp4") !== -1) {
+            streams.push(makeStream(ifr, titleTr + " • Türkçe Dublaj / Altyazılı (1080p)", "1080p", ifr.indexOf(".m3u8") !== -1, {
+              "User-Agent": USER_AGENT,
+              "Referer": targetUrl
+            }));
+          }
+        }
+
+        if (streams.length > 0) {
+          return streams;
+        }
+      }
+    } catch (e) {}
+  }
+
+  return [];
 }
 
 if (typeof module !== "undefined" && module.exports) {
