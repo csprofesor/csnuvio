@@ -254,6 +254,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     } catch (err) {}
 
     if (streams.length > 0) {
+      for (var si = 0; si < streams.length; si++) {
+        streams[si].title = (tmdb.titleTr || "AnimeciX") + " • Türkçe Altyazılı (" + (streams[si].quality || "1080p") + ")" + (si > 0 ? " #" + (si + 1) : "");
+      }
       return streams;
     }
   }

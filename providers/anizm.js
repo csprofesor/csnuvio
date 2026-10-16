@@ -238,6 +238,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
                   var fullPlayerUrl = playerIframe.startsWith("http") ? playerIframe : (playerIframe.startsWith("//") ? "https:" + playerIframe : BASE_URL + playerIframe);
                   var streams = await resolveAnizmPlayer(fullPlayerUrl);
                   if (streams && streams.length > 0) {
+                    for (var si = 0; si < streams.length; si++) {
+                      streams[si].title = titleTr + " • Türkçe Altyazılı (" + (streams[si].quality || "1080p") + ")" + (si > 0 ? " #" + (si + 1) : "");
+                    }
                     return streams;
                   }
                 }

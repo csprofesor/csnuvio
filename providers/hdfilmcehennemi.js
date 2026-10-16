@@ -303,15 +303,20 @@ function findIframes(pageUrl, domain) {
 
 function makeStream(url, title, referer, index) {
   var lower = url.toLowerCase();
-  var quality = "HD";
+  var quality = "1080p";
   var q = lower.match(/(?:2160|1440|1080|720|576|480|360)p/);
   if (q) quality = q[0];
   else if (lower.indexOf("4k") !== -1) quality = "4K";
 
+  var lang = "Türkçe Dublaj";
+  if (lower.indexOf("altyazi") !== -1 || lower.indexOf("sub") !== -1 || lower.indexOf("trsub") !== -1) {
+    lang = "Türkçe Altyazılı";
+  }
+
   var isHls = lower.indexOf(".m3u8") !== -1 || lower.indexOf(".txt") !== -1 || lower.indexOf("/hls/") !== -1;
   return {
     name: "HDFilmCehennemi",
-    title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
+    title: title + " • " + lang + " (" + quality + ")" + (index > 0 ? " #" + (index + 1) : ""),
     url: url,
     quality: quality,
     type: isHls ? "hls" : "mp4",

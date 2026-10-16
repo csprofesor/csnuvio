@@ -278,6 +278,9 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
       } catch (e) {}
 
       if (streams.length > 0) {
+        for (var si = 0; si < streams.length; si++) {
+          streams[si].title = tmdb.titleTr + " • Türkçe Altyazılı / Dublaj (1080p)" + (si > 0 ? " #" + (si + 1) : "");
+        }
         return streams;
       }
     }

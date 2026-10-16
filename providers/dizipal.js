@@ -377,7 +377,7 @@ function resolveDPlayer(iframeUrl, referer) {
 
 function makeStream(url, title, referer, index) {
   var lower = url.toLowerCase();
-  var quality = "HD";
+  var quality = "1080p";
   var q = lower.match(/(?:2160|1440|1080|720|576|480|360)p/);
   if (q) quality = q[0];
   else if (lower.indexOf("4k") !== -1) quality = "4K";
@@ -385,7 +385,7 @@ function makeStream(url, title, referer, index) {
   var isHls = lower.indexOf(".m3u8") !== -1;
   return {
     name: "DiziPal",
-    title: title + (index > 0 ? " • Kaynak " + (index + 1) : ""),
+    title: title + " • Türkçe Altyazılı / Dublaj (" + quality + ")" + (index > 0 ? " #" + (index + 1) : ""),
     url: url,
     quality: quality,
     type: isHls ? "hls" : "mp4",
