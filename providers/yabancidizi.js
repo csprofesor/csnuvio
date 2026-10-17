@@ -15,8 +15,16 @@ var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/2010
 var BASE_HEADERS = {
   "User-Agent": USER_AGENT,
   "Referer": BASE_URL + "/",
-  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+  "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Sec-Ch-Ua": "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"",
+  "Sec-Ch-Ua-Mobile": "?0",
+  "Sec-Ch-Ua-Platform": "\"Windows\"",
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1"
 };
 
 function sanitizeText(str) {
@@ -101,29 +109,30 @@ function makeStream(url, label, quality, isHls, headers) {
 async function searchYabanciDizi(query, base) {
   var results = [];
   try {
-    var res = await fetch(base + "/search?qr=" + encodeURIComponent(query), {
+    var params = new URLSearchParams();
+    params.append("q", query);
+
+    var res = await fetch(base + "/search", {
       method: "POST",
       headers: {
         "User-Agent": USER_AGENT,
         "Referer": base + "/",
+        "Content-Type": "application/x-www-form-urlencoded",
         "X-Requested-With": "XMLHttpRequest"
-      }
+      },
+      body: params.toString()
     });
     if (res.ok) {
       var json = await res.json();
-      if (json && json.success === 1 && json.data && Array.isArray(json.data.result)) {
-        for (var i = 0; i < json.data.result.length; i++) {
-          var item = json.data.result[i];
-          var title = item.s_name;
-          var link = item.s_link;
-          var type = item.s_type; // 0: series, 1: movie
-          if (title && link) {
-            results.push({
-              title: sanitizeText(title),
-              url: base + (type === "1" ? "/film/" : "/dizi/") + link,
-              isMovie: type === "1"
-            });
-          }
+      var list = json.sonuclar || [];
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        if (it.name && it.url) {
+          results.push({
+            title: sanitizeText(it.name),
+            url: it.url,
+            isMovie: it.url.indexOf("/film/") !== -1
+          });
         }
       }
     }
@@ -212,7 +221,30 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 
       var epUrl = bestMatch.url;
       if (isTv) {
-        epUrl = bestMatch.url.replace(/\/$/, "") + "/" + sNum + "-sezon-" + eNum + "-bolum";
+        try {
+          var seriesRes = await fetch(bestMatch.url, { headers: BASE_HEADERS });
+          if (seriesRes.ok) {
+            var sHtml = await seriesRes.text();
+            var $s = cheerio.load(sHtml);
+            var epCandidate = null;
+
+            $s("a[href*='bolum']").each(function(idx, el) {
+              var h = $s(el).attr("href");
+              if (!h) return;
+              var sM = h.match(/(\d+)-sezon/i);
+              var eM = h.match(/(\d+)-bolum/i);
+              if (sM && eM && parseInt(sM[1], 10) === sNum && parseInt(eM[1], 10) === eNum) {
+                epCandidate = h.startsWith("http") ? h : base + (h.startsWith("/") ? "" : "/") + h;
+              }
+            });
+
+            if (epCandidate) {
+              epUrl = epCandidate;
+            } else {
+              epUrl = bestMatch.url.replace(/\/$/, "") + "/" + sNum + "-sezon-" + eNum + "-bolum";
+            }
+          }
+        } catch (e) {}
       }
 
       var streams = [];
