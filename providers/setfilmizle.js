@@ -309,9 +309,11 @@ async function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: hardCapGetStreams };
+  module.exports = { getStreams: hardCapGetStreams, getMainPage: getMainPage, getCatalog: getMainPage };
 } else {
   global.getStreams = hardCapGetStreams;
+global.getMainPage = getMainPage;
+global.getCatalog = getMainPage;
 }
 
 function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
@@ -322,3 +324,36 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     })
   ]);
 }
+
+
+async function getMainPage(page, category) {
+  var p = page || 1;
+  var url = BASE_URL + (p > 1 ? "/page/" + p + "/" : "/");
+  try {
+    var res = await fetch(url, { headers: BASE_HEADERS });
+    if (!res.ok) return [];
+    var html = await res.text();
+    var $ = cheerio.load(html);
+    var items = [];
+    $("a.card-link, article.card").each(function(_, el) {
+      var a = $(el).is("a") ? $(el) : $(el).find("a").first();
+      var href = a.attr("href");
+      var img = $(el).find("img").first();
+      var title = $(el).find("h2, h3").text().trim() || img.attr("alt") || a.attr("title");
+      var poster = img.attr("src") || img.attr("data-src");
+      if (href && title && !items.some(function(i) { return i.url === href; })) {
+        var clean = sanitizeText(title);
+        if (clean && clean.length > 2) {
+          items.push({
+            title: clean,
+            url: href.startsWith("http") ? href : BASE_URL + href,
+            posterUrl: poster ? (poster.startsWith("//") ? "https:" + poster : (poster.startsWith("http") ? poster : BASE_URL + poster)) : null,
+            type: href.indexOf("/dizi/") !== -1 ? "series" : "movie"
+          });
+        }
+      }
+    });
+    return items;
+  } catch (e) { return []; }
+}
+

@@ -291,9 +291,11 @@ function _getStreamsCore(tmdbId, mediaType) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: hardCapGetStreams };
+  module.exports = { getStreams: hardCapGetStreams, getMainPage: getMainPage, getCatalog: getMainPage };
 } else {
   global.getStreams = hardCapGetStreams;
+global.getMainPage = getMainPage;
+global.getCatalog = getMainPage;
 }
 
 function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
@@ -304,3 +306,35 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     })
   ]);
 }
+
+
+async function getMainPage(page, category) {
+  var p = page || 1;
+  var url = BASE_URL + (p > 1 ? "/sayfa/" + p + "/" : "/");
+  try {
+    var res = await fetch(url, { headers: HEADERS });
+    if (!res.ok) return [];
+    var html = await res.text();
+    var $ = cheerio.load(html);
+    var items = [];
+    $("div.film_kutusu a, div.icerik a").each(function(_, el) {
+      var href = $(el).attr("href");
+      var img = $(el).find("img").first();
+      var title = $(el).find("h2, h3, .title").text().trim() || img.attr("alt") || $(el).attr("title");
+      var poster = img.attr("data-src") || img.attr("src");
+      if (href && title && !items.some(function(i) { return i.url === href; })) {
+        var clean = sanitizeText(title);
+        if (clean && clean.length > 2) {
+          items.push({
+            title: clean,
+            url: href.startsWith("http") ? href : BASE_URL + href,
+            posterUrl: poster ? (poster.startsWith("//") ? "https:" + poster : (poster.startsWith("http") ? poster : BASE_URL + poster)) : null,
+            type: "movie"
+          });
+        }
+      }
+    });
+    return items;
+  } catch (e) { return []; }
+}
+

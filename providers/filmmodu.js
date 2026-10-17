@@ -308,14 +308,16 @@ async function getMainPage(page, category) {
     var html = await res.text();
     var $ = cheerio.load(html);
     var items = [];
-    $("a[href*='-film-izle']").each(function(_, el) {
-      var href = $(el).attr("href");
+    $("div.movie, div.film-box, article, div.movie-box, a[href*='-film-izle']").each(function(_, el) {
+      var a = $(el).is("a") ? $(el) : $(el).find("a[href*='-film-izle']").first();
+      var href = a.attr("href");
       var img = $(el).find("img").first();
-      var title = $(el).attr("title") || $(el).text().trim();
+      var title = $(el).find(".movie-title, h2, h3, .title").text().trim() || a.attr("title") || img.attr("alt");
       var poster = img.attr("data-src") || img.attr("src");
-      if (href && title && !items.some(function(i) { return i.url === href; })) {
+
+      if (href && title && href.indexOf("-film-izle") !== -1 && href.indexOf("/film-tur/") === -1 && !items.some(function(i) { return i.url === href; })) {
         var clean = sanitizeText(title.replace(/\s*(?:film izle|HD|1080p).*$/gi, ""));
-        if (clean && clean.length > 2 && !clean.includes("Dublaj")) {
+        if (clean && clean.length > 2 && !clean.toLowerCase().includes("dublaj") && !clean.toLowerCase().includes("altyazı")) {
           items.push({
             title: clean,
             url: href.startsWith("http") ? href : BASE_URL + href,
