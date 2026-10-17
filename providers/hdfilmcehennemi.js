@@ -460,9 +460,11 @@ function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: hardCapGetStreams };
+  module.exports = { getStreams: hardCapGetStreams, getMainPage: getMainPage, getCatalog: getMainPage };
 } else {
   global.getStreams = hardCapGetStreams;
+global.getMainPage = getMainPage;
+global.getCatalog = getMainPage;
 }
 
 function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
@@ -473,3 +475,35 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     })
   ]);
 }
+
+
+async function getMainPage(page, category) {
+  var p = page || 1;
+  var url = BASE_DOMAINS[0] + (p > 1 ? "/sayfa/" + p + "/" : "/");
+  try {
+    var html = await getText(url, { headers: { "User-Agent": USER_AGENT } });
+    var $ = cheerio.load(html);
+    var items = [];
+    $("a[href*='.html']").each(function(_, el) {
+      var href = $(el).attr("href");
+      var img = $(el).find("img").first();
+      var title = $(el).text().trim() || img.attr("alt") || $(el).attr("title");
+      var poster = img.attr("data-src") || img.attr("src");
+      if (href && title && !items.some(function(i) { return i.url === href; })) {
+        var cleanTitle = sanitizeText(title.replace(/\s*(?:İzle|izle|HD|1080p|Türkçe Dublaj|Altyazılı).*$/gi, ""));
+        if (cleanTitle) {
+          items.push({
+            title: cleanTitle,
+            url: href.startsWith("http") ? href : BASE_DOMAINS[0] + href,
+            posterUrl: poster ? (poster.startsWith("//") ? "https:" + poster : (poster.startsWith("http") ? poster : BASE_DOMAINS[0] + poster)) : null,
+            type: "movie"
+          });
+        }
+      }
+    });
+    return items;
+  } catch (e) {
+    return [];
+  }
+}
+

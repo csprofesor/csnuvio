@@ -1,17 +1,52 @@
 {
   "id": "csnuvio-repo",
   "name": "CSNuvio Repo",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "CSNuvio Nuvio eklenti deposu (CloudStream GSRepo Port)",
   "author": "gs",
   "manifestVersion": 1,
   "pluginVersion": 1,
+  "catalogs": [
+    {
+      "id": "csnuvio-home-movies",
+      "type": "movie",
+      "name": "🔥 Nuvio Trend Filmler (HDFilmCehennemi / SelçukFlix / FullHDFilm)",
+      "extra": [
+        {
+          "name": "search",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "id": "csnuvio-home-series",
+      "type": "series",
+      "name": "📺 Nuvio Popüler Diziler (Dizilla / DiziPal / SelçukFlix)",
+      "extra": [
+        {
+          "name": "search",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "id": "csnuvio-home-anime",
+      "type": "anime",
+      "name": "🌸 Nuvio Popüler Animeler (AnimeciX / Anizm)",
+      "extra": [
+        {
+          "name": "search",
+          "isRequired": false
+        }
+      ]
+    }
+  ],
   "scrapers": [
     {
       "id": "csnuvio-hdfilmcehennemi",
       "name": "HDFilmCehennemi",
       "description": "HDFilmCehennemi Türkçe film ve dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/hdfilmcehennemi.js",
@@ -23,7 +58,7 @@
       "id": "csnuvio-selcukflix",
       "name": "SelçukFlix",
       "description": "SelçukFlix film ve dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/selcukflix.js",
@@ -32,10 +67,70 @@
       "contentLanguage": ["tr"]
     },
     {
+      "id": "csnuvio-dizilla",
+      "name": "Dizilla",
+      "description": "Dizilla Türkçe yabancı dizi kaynakları",
+      "version": "1.0.14",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizilla.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-dizipal",
+      "name": "DiziPal",
+      "description": "DiziPal Türkçe dizi ve film kaynakları",
+      "version": "1.0.14",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizipal.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-animecix",
+      "name": "AnimeciX",
+      "description": "AnimeciX Türkçe anime kaynakları",
+      "version": "1.0.14",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/animecix.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-fullhdfilm",
+      "name": "FullHDFilm",
+      "description": "FullHDFilm Türkçe film ve dizi kaynakları",
+      "version": "1.0.14",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/fullhdfilm.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
+      "id": "csnuvio-filmmakinesi",
+      "name": "FilmMakinesi",
+      "description": "FilmMakinesi Türkçe film ve dizi kaynakları",
+      "version": "1.0.14",
+      "author": "gs",
+      "supportedTypes": ["movie", "tv"],
+      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmmakinesi.js",
+      "enabled": true,
+      "formats": ["m3u8", "mp4"],
+      "contentLanguage": ["tr"]
+    },
+    {
       "id": "csnuvio-jetfilmizle",
       "name": "JetFilmizle",
       "description": "JetFilmizle Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/jetfilmizle.js",
@@ -47,7 +142,7 @@
       "id": "csnuvio-setfilmizle",
       "name": "SetFilmİzle",
       "description": "SetFilmİzle Türkçe film ve dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/setfilmizle.js",
@@ -59,7 +154,7 @@
       "id": "csnuvio-dizimom",
       "name": "DiziMom",
       "description": "DiziMom Türkçe dizi ve film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizimom.js",
@@ -68,22 +163,10 @@
       "contentLanguage": ["tr"]
     },
     {
-      "id": "csnuvio-dizipal",
-      "name": "DiziPal",
-      "description": "DiziPal Türkçe dizi ve film kaynakları",
-      "version": "1.0.13",
-      "author": "gs",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizipal.js",
-      "enabled": true,
-      "formats": ["m3u8", "mp4"],
-      "contentLanguage": ["tr"]
-    },
-    {
       "id": "csnuvio-filmmodu",
       "name": "FilmModu",
       "description": "FilmModu Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmmodu.js",
@@ -92,22 +175,10 @@
       "contentLanguage": ["tr"]
     },
     {
-      "id": "csnuvio-filmmakinesi",
-      "name": "FilmMakinesi",
-      "description": "FilmMakinesi Türkçe film ve dizi kaynakları",
-      "version": "1.0.13",
-      "author": "gs",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmmakinesi.js",
-      "enabled": true,
-      "formats": ["m3u8", "mp4"],
-      "contentLanguage": ["tr"]
-    },
-    {
       "id": "csnuvio-filmkovasi",
       "name": "FilmKovası",
       "description": "FilmKovası Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/filmkovasi.js",
@@ -116,22 +187,10 @@
       "contentLanguage": ["tr"]
     },
     {
-      "id": "csnuvio-fullhdfilm",
-      "name": "FullHDFilm",
-      "description": "FullHDFilm Türkçe film ve dizi kaynakları",
-      "version": "1.0.13",
-      "author": "gs",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/fullhdfilm.js",
-      "enabled": true,
-      "formats": ["m3u8", "mp4"],
-      "contentLanguage": ["tr"]
-    },
-    {
       "id": "csnuvio-webteizle",
       "name": "Webteİzle",
       "description": "Webteİzle Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/webteizle.js",
@@ -143,7 +202,7 @@
       "id": "csnuvio-kultfilmler",
       "name": "KültFilmler",
       "description": "KültFilmler Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/kultfilmler.js",
@@ -155,7 +214,7 @@
       "id": "csnuvio-tavsiyefilmizle",
       "name": "TavsiyeFilmİzle",
       "description": "TavsiyeFilmİzle Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/tavsiyefilmizle.js",
@@ -167,7 +226,7 @@
       "id": "csnuvio-sinemacx",
       "name": "SinemaCX",
       "description": "SinemaCX Türkçe film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sinemacx.js",
@@ -179,7 +238,7 @@
       "id": "csnuvio-hintfilmizle",
       "name": "HintFilmİzle",
       "description": "HintFilmİzle Hint ve yabancı film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/hintfilmizle.js",
@@ -191,7 +250,7 @@
       "id": "csnuvio-dizibox",
       "name": "DiziBox",
       "description": "DiziBox Türkçe yabancı dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizibox.js",
@@ -200,22 +259,10 @@
       "contentLanguage": ["tr"]
     },
     {
-      "id": "csnuvio-dizilla",
-      "name": "Dizilla",
-      "description": "Dizilla Türkçe yabancı dizi kaynakları",
-      "version": "1.0.13",
-      "author": "gs",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizilla.js",
-      "enabled": true,
-      "formats": ["m3u8", "mp4"],
-      "contentLanguage": ["tr"]
-    },
-    {
       "id": "csnuvio-dizigom",
       "name": "DiziGom",
       "description": "DiziGom Türkçe dizi ve film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizigom.js",
@@ -227,7 +274,7 @@
       "id": "csnuvio-sezonlukdizi",
       "name": "SezonlukDizi",
       "description": "SezonlukDizi Türkçe yabancı dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sezonlukdizi.js",
@@ -239,7 +286,7 @@
       "id": "csnuvio-yabancidizi",
       "name": "YabancıDizi",
       "description": "YabancıDizi Türkçe dizi ve film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/yabancidizi.js",
@@ -251,7 +298,7 @@
       "id": "csnuvio-ddizi",
       "name": "DDizi",
       "description": "DDizi yerli ve yabancı dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/ddizi.js",
@@ -263,7 +310,7 @@
       "id": "csnuvio-dizikorea",
       "name": "DiziKorea",
       "description": "DiziKorea Asya ve Kore dizileri kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizikorea.js",
@@ -275,7 +322,7 @@
       "id": "csnuvio-dizimag",
       "name": "DiziMag",
       "description": "DiziMag Türkçe dizi ve film kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/dizimag.js",
@@ -287,7 +334,7 @@
       "id": "csnuvio-sinewix",
       "name": "SineWix",
       "description": "SineWix film, dizi ve anime kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sinewix.js",
@@ -299,7 +346,7 @@
       "id": "csnuvio-sinematv",
       "name": "SinemaTV",
       "description": "SinemaTV film ve dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/sinematv.js",
@@ -308,22 +355,10 @@
       "contentLanguage": ["tr"]
     },
     {
-      "id": "csnuvio-animecix",
-      "name": "AnimeciX",
-      "description": "AnimeciX Türkçe anime kaynakları",
-      "version": "1.0.13",
-      "author": "gs",
-      "supportedTypes": ["movie", "tv"],
-      "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/animecix.js",
-      "enabled": true,
-      "formats": ["m3u8", "mp4"],
-      "contentLanguage": ["tr"]
-    },
-    {
       "id": "csnuvio-anizm",
       "name": "Anizm",
       "description": "Anizm Türkçe anime kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/anizm.js",
@@ -335,7 +370,7 @@
       "id": "csnuvio-watch2movies",
       "name": "Watch2Movies",
       "description": "Watch2Movies İngilizce film ve dizi kaynakları",
-      "version": "1.0.13",
+      "version": "1.0.14",
       "author": "gs",
       "supportedTypes": ["movie", "tv"],
       "filename": "https://raw.githubusercontent.com/csprofesor/csnuvio/main/providers/watch2movies.js",

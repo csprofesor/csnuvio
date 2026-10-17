@@ -278,9 +278,11 @@ async function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: hardCapGetStreams };
+  module.exports = { getStreams: hardCapGetStreams, getMainPage: getMainPage, getCatalog: getMainPage };
 } else {
   global.getStreams = hardCapGetStreams;
+global.getMainPage = getMainPage;
+global.getCatalog = getMainPage;
 }
 
 function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
@@ -291,3 +293,31 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
     })
   ]);
 }
+
+
+async function getMainPage(page, category) {
+  var p = page || 1;
+  var url = "https://animecix.tv/secure/titles?type=series&limit=20&page=" + p + "&onlyStreamable=true";
+  try {
+    var res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "x-e-h": "7Y2ozlO+QysR5w9Q6Tupmtvl9jJp7ThFH8SB+Lo7NvZjgjqRSqOgcT2v4ISM9sP10LmnlYI8WQ==.xrlyOBFS5BHjQ2Lk" } });
+    if (!res.ok) return [];
+    var json = await res.json();
+    var list = json.pagination?.data || json.results || [];
+    var items = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (item.title || item.name) {
+        items.push({
+          title: sanitizeText(item.title || item.name),
+          url: "https://animecix.tv/v/" + (item.slug || item.id),
+          posterUrl: item.poster || item.cover || null,
+          type: "anime"
+        });
+      }
+    }
+    return items;
+  } catch (e) {
+    return [];
+  }
+}
+
