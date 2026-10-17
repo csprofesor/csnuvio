@@ -66,22 +66,26 @@ function levenshteinDistance(s1, s2) {
 async function fetchTmdbDetails(tmdbId, mediaType) {
   try {
     var type = mediaType === "movie" ? "movie" : "tv";
-    var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR");
-    var dataTr = resTr.ok ? await resTr.json() : null;
+    var trUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR";
+    var enUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=en-US";
 
-    var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=en-US");
-    var dataEn = resEn.ok ? await resEn.json() : null;
+    var pTr = fetch(trUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+    var pEn = fetch(enUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
 
-    var titleTr = dataTr ? (dataTr.title || dataTr.name) : "";
-    var titleEn = dataEn ? (dataEn.title || dataEn.name) : "";
-    var origTitle = (dataEn && dataEn.original_title) || (dataEn && dataEn.original_name) || "";
-    var date = (dataEn && (dataEn.release_date || dataEn.first_air_date)) || "";
+    var res = await Promise.all([pTr, pEn]);
+    var dataTr = res[0] || {};
+    var dataEn = res[1] || {};
+
+    var titleTr = dataTr.title || dataTr.name || dataEn.title || dataEn.name || "";
+    var titleEn = dataEn.title || dataEn.name || dataTr.title || dataTr.name || "";
+    var origTitle = dataEn.original_title || dataEn.original_name || dataTr.original_title || dataTr.original_name || "";
+    var date = dataEn.release_date || dataEn.first_air_date || dataTr.release_date || dataTr.first_air_date || "";
     var year = date ? parseInt(date.substring(0, 4), 10) : null;
 
     return {
       titleTr: titleTr || titleEn || origTitle,
-      titleEn: titleEn || origTitle || titleTr,
-      originalTitle: origTitle,
+      titleEn: titleEn || titleTr || origTitle,
+      originalTitle: origTitle || titleTr || titleEn,
       year: year
     };
   } catch (e) {

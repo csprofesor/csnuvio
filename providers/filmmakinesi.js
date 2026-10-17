@@ -59,26 +59,31 @@ function distance(a, b) {
 
 function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
   var apiKey = "1c29a5198ee1854bd5eb45dbe8d17d92";
-  var endpoint = type === "tv" || type === "series" ? "tv" : "movie";
-  var mainUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=tr-TR";
+  var endpoint = (type === "tv" || type === "series") ? "tv" : "movie";
+  var trUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=tr-TR";
+  var enUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=en-US";
 
-  return fetch(mainUrl).then(function(r) { return r.json(); }).then(function(d) {
-    var info = {
-      title: sanitizeText(endpoint === "tv" ? d.name : d.title),
-      originalTitle: sanitizeText(endpoint === "tv" ? d.original_name : d.original_title),
-      year: ((endpoint === "tv" ? d.first_air_date : d.release_date) || "").slice(0, 4)
+  var pTr = fetch(trUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+  var pEn = fetch(enUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+
+  return Promise.all([pTr, pEn]).then(function(res) {
+    var dTr = res[0] || {};
+    var dEn = res[1] || {};
+
+    var titleTr = sanitizeText(endpoint === "tv" ? (dTr.name || dEn.name) : (dTr.title || dEn.title));
+    var titleEn = sanitizeText(endpoint === "tv" ? (dEn.name || dTr.name) : (dEn.title || dTr.title));
+    var origTitle = sanitizeText(endpoint === "tv" ? (dEn.original_name || dTr.original_name) : (dEn.original_title || dTr.original_title));
+    var dateStr = (endpoint === "tv" ? (dEn.first_air_date || dTr.first_air_date) : (dEn.release_date || dTr.release_date)) || "";
+    var yearStr = dateStr.slice(0, 4);
+
+    return {
+      title: titleTr || titleEn || origTitle,
+      titleTr: titleTr || titleEn || origTitle,
+      titleEn: titleEn || titleTr || origTitle,
+      originalTitle: origTitle || titleTr || titleEn,
+      year: yearStr
     };
-
-    if (endpoint === "tv" && seasonNum && episodeNum) {
-      var epUrl = "https://api.themoviedb.org/3/tv/" + tmdbId + "/season/" + seasonNum + "/episode/" + episodeNum + "?api_key=" + apiKey + "&language=tr-TR";
-      return fetch(epUrl).then(function(er) { return er.json(); }).then(function(epData) {
-        info.episodeTitle = sanitizeText(epData.name || "");
-        return info;
-      }).catch(function() { return info; });
-    }
-
-    return info;
-  }).catch(function() { return null; });
+  });
 }
 
 function searchSite(title) {
