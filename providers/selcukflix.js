@@ -298,7 +298,7 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
   return Promise.race([
     _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
     new Promise(function(resolve) {
-      setTimeout(function() { resolve([]); }, 3500);
+      setTimeout(function() { resolve([]); }, 2200);
     })
   ]);
 }

@@ -57,10 +57,20 @@ function distance(a, b) {
 }
 
 function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
+  var idStr = String(tmdbId || "").trim();
+  if (!/^\d+$/.test(idStr)) {
+    return Promise.resolve({
+      title: idStr,
+      titleTr: idStr,
+      titleEn: idStr,
+      originalTitle: idStr,
+      year: ""
+    });
+  }
   var apiKey = "1c29a5198ee1854bd5eb45dbe8d17d92";
   var endpoint = (type === "tv" || type === "series") ? "tv" : "movie";
-  var trUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=tr-TR";
-  var enUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=en-US";
+  var trUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + idStr + "?api_key=" + apiKey + "&language=tr-TR";
+  var enUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + idStr + "?api_key=" + apiKey + "&language=en-US";
 
   var pTr = fetch(trUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
   var pEn = fetch(enUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
@@ -281,7 +291,7 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
   return Promise.race([
     _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
     new Promise(function(resolve) {
-      setTimeout(function() { resolve([]); }, 3500);
+      setTimeout(function() { resolve([]); }, 2200);
     })
   ]);
 }

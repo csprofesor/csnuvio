@@ -66,10 +66,19 @@ function levenshteinDistance(s1, s2) {
 }
 
 async function fetchTmdbDetails(tmdbId, mediaType) {
+  var idStr = String(tmdbId || "").trim();
+  if (!/^\d+$/.test(idStr)) {
+    return {
+      titleTr: idStr,
+      titleEn: idStr,
+      originalTitle: idStr,
+      year: null
+    };
+  }
   try {
     var type = mediaType === "movie" ? "movie" : "tv";
-    var trUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=tr-TR";
-    var enUrl = "https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=" + TMDB_API_KEY + "&language=en-US";
+    var trUrl = "https://api.themoviedb.org/3/" + type + "/" + idStr + "?api_key=" + TMDB_API_KEY + "&language=tr-TR";
+    var enUrl = "https://api.themoviedb.org/3/" + type + "/" + idStr + "?api_key=" + TMDB_API_KEY + "&language=en-US";
 
     var pTr = fetch(trUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
     var pEn = fetch(enUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
@@ -378,7 +387,7 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
   return Promise.race([
     _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
     new Promise(function(resolve) {
-      setTimeout(function() { resolve([]); }, 3500);
+      setTimeout(function() { resolve([]); }, 2200);
     })
   ]);
 }

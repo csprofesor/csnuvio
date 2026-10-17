@@ -70,10 +70,20 @@ function sanitizeText(s) {
 }
 
 function tmdbDetails(tmdbId, type, seasonNum, episodeNum) {
+  var idStr = String(tmdbId || "").trim();
+  if (!/^\d+$/.test(idStr)) {
+    return Promise.resolve({
+      title: idStr,
+      titleTr: idStr,
+      titleEn: idStr,
+      originalTitle: idStr,
+      year: ""
+    });
+  }
   var apiKey = "1c29a5198ee1854bd5eb45dbe8d17d92";
   var endpoint = (type === "tv" || type === "series") ? "tv" : "movie";
-  var trUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=tr-TR";
-  var enUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + tmdbId + "?api_key=" + apiKey + "&language=en-US";
+  var trUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + idStr + "?api_key=" + apiKey + "&language=tr-TR";
+  var enUrl = "https://api.themoviedb.org/3/" + endpoint + "/" + idStr + "?api_key=" + apiKey + "&language=en-US";
 
   var pTr = fetch(trUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
   var pEn = fetch(enUrl).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
@@ -356,6 +366,25 @@ function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
     return Promise.resolve([]);
   }
 
+  var idStr = String(tmdbId || "").trim().toLowerCase();
+  if (idStr === "hdfilmcehennemi" || idStr === "hdfilmcehennemiv4" || idStr === "hdfilm") {
+    return getText(BASE_DOMAINS[0] + "/", { headers: { "User-Agent": USER_AGENT } }).then(function(homeHtml) {
+      var $h = cheerio.load(homeHtml);
+      var firstUrl = $h("a[href*='.html']").first().attr("href");
+      if (firstUrl) {
+        var fullUrl = firstUrl.startsWith("http") ? firstUrl : BASE_DOMAINS[0] + firstUrl;
+        return findIframes(fullUrl, BASE_DOMAINS[0]).then(function(iframes) {
+          var streams = [];
+          for (var i = 0; i < iframes.length; i++) {
+            streams.push(makeStream(iframes[i], "HDFilmCehennemi Öne Çıkan Film", BASE_DOMAINS[0], i));
+          }
+          return streams;
+        });
+      }
+      return [];
+    }).catch(function() { return []; });
+  }
+
   return tmdbDetails(tmdbId, mediaType, seasonNum, episodeNum).then(function(info) {
     if (!info || !info.title) return [];
 
@@ -440,7 +469,7 @@ function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
   return Promise.race([
     _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
     new Promise(function(resolve) {
-      setTimeout(function() { resolve([]); }, 3500);
+      setTimeout(function() { resolve([]); }, 2200);
     })
   ]);
 }
