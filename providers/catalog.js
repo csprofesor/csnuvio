@@ -2,8 +2,20 @@
 
 var cheerio = require("cheerio-without-node-native");
 
+var DOMAINS = [
+  "https://hdfilmcehennemiv4.com",
+  "https://dizilla.now",
+  "https://selcukflix.app"
+];
+var BASE_URL = DOMAINS[0];
 var PROVIDER_NAME = "CSNuvio Ana Sayfa Kataloğu";
+
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+var BASE_HEADERS = {
+  "User-Agent": USER_AGENT,
+  "Referer": BASE_URL + "/",
+  "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7"
+};
 
 function sanitizeText(str) {
   if (!str) return "";
@@ -127,7 +139,11 @@ async function getMainPage(page, category) {
   return combined;
 }
 
-async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+async function searchSite(query) {
+  return getMainPage(1);
+}
+
+async function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
   return [];
 }
 
@@ -139,10 +155,12 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     getStreams: hardCapGetStreams,
     getMainPage: getMainPage,
-    getCatalog: getMainPage
+    getCatalog: getMainPage,
+    searchSite: searchSite
   };
 } else {
   global.getStreams = hardCapGetStreams;
   global.getMainPage = getMainPage;
   global.getCatalog = getMainPage;
+  global.searchSite = searchSite;
 }
