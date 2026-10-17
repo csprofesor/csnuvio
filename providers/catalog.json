@@ -1,0 +1,12 @@
+{
+  "id": "csnuvio-catalog",
+  "name": "CSNuvio Ana Sayfa Kataloğu",
+  "description": "CSNuvio birleşik film, dizi ve anime ana sayfa kataloğu",
+  "version": "1.0.16",
+  "author": "gs",
+  "supportedTypes": ["movie", "tv"],
+  "filename": "https://cdn.jsdelivr.net/gh/csprofesor/csnuvio@main/providers/catalog.js",
+  "enabled": true,
+  "formats": ["m3u8", "mp4"],
+  "contentLanguage": ["tr"]
+}
