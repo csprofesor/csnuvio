@@ -1,7 +1,39 @@
+
+function base64ToBytes(b64) {
+  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  b64 = String(b64).replace(/=+$/, "");
+  var bytes = [];
+  for (var bc = 0, bs, buffer, idx = 0; buffer = b64.charAt(idx++);
+    ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? bytes.push(255 & bs >> (-2 * bc & 6)) : 0
+  ) {
+    buffer = chars.indexOf(buffer);
+  }
+  return new Uint8Array(bytes);
+}
+
+function safeBufferFrom(str, enc) {
+  if (typeof Buffer !== "undefined" && typeof Buffer.from === "function") {
+    try { return safeBufferFrom(str, enc); } catch (_) {}
+  }
+  if (enc === "utf8" || enc === "ascii") {
+    var arr = new Uint8Array(str.length);
+    for (var i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i);
+    return arr;
+  }
+  return base64ToBytes(str);
+}
+
+function safeBufferAlloc(len) {
+  if (typeof Buffer !== "undefined" && typeof Buffer.alloc === "function") {
+    try { return safeBufferAlloc(len, 0); } catch (_) {}
+  }
+  return new Uint8Array(len);
+}
+
 "use strict";
 
 var cheerio = require("cheerio-without-node-native");
-var crypto = require("crypto");
+var crypto = null; try { crypto = require("crypto"); } catch (_) { crypto = null; }
 
 var DOMAINS = [
   "https://selcukflix.app"
@@ -18,8 +50,8 @@ var BASE_HEADERS = {
 
 function decryptAES(base64Str) {
   try {
-    var key = Buffer.from("9bYMCNQiWsXIYFWYAu7EkdsSbmGBTyUI", "utf8");
-    var iv = Buffer.alloc(16, 0);
+    var key = safeBufferFrom("9bYMCNQiWsXIYFWYAu7EkdsSbmGBTyUI", "utf8");
+    var iv = safeBufferAlloc(16, 0);
     var decipher = crypto.createDecipheriv("aes-256-cbc", key, iv);
     var decrypted = decipher.update(base64Str, "base64", "utf8");
     decrypted += decipher.final("utf8");

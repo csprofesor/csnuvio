@@ -36,20 +36,29 @@ function getText(url, options) {
   });
 }
 
-function postForm(url, data, referer) {
-  var params = new URLSearchParams();
+function encodeFormData(data) {
+  if (!data) return "";
+  if (typeof data === "string") return data;
+  var pairs = [];
   for (var k in data) {
-    params.append(k, data[k]);
+    if (Object.prototype.hasOwnProperty.call(data, k)) {
+      pairs.push(encodeURIComponent(k) + "=" + encodeURIComponent(data[k]));
+    }
   }
+  return pairs.join("&");
+}
+
+function postForm(url, data, referer) {
+  var bodyStr = encodeFormData(data);
   var headers = Object.assign({}, HEADERS, {
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
-    "Referer": referer || BASE_DOMAINS[0] + "/"
+    "Referer": referer || (typeof BASE_URL !== "undefined" ? BASE_URL : "") + "/"
   });
   return fetch(url, {
     method: "POST",
     headers: headers,
-    body: params.toString()
+    body: bodyStr
   }).then(function(r) {
     if (!r.ok) throw new Error("HTTP " + r.status + " on " + url);
     return r.text();
