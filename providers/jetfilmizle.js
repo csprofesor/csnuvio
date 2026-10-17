@@ -132,7 +132,7 @@ async function resolveVideoPark(iframeUrl) {
   return streams;
 }
 
-async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+async function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
   var type = mediaType === "movie" ? "movie" : "tv";
   var resTr = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=tr-TR").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
   var resEn = await fetch("https://api.themoviedb.org/3/" + type + "/" + tmdbId + "?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US").then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
@@ -238,7 +238,16 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
+  module.exports = { getStreams: hardCapGetStreams };
 } else {
-  global.getStreams = getStreams;
+  global.getStreams = hardCapGetStreams;
+}
+
+function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  return Promise.race([
+    _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
+    new Promise(function(resolve) {
+      setTimeout(function() { resolve([]); }, 3500);
+    })
+  ]);
 }

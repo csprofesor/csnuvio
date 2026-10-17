@@ -150,7 +150,7 @@ async function resolveTauVideo(tauUrl) {
   return streams;
 }
 
-async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+async function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
   var tmdb = await fetchTmdbDetails(tmdbId, mediaType);
   if (!tmdb) return [];
 
@@ -269,7 +269,16 @@ async function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
+  module.exports = { getStreams: hardCapGetStreams };
 } else {
-  global.getStreams = getStreams;
+  global.getStreams = hardCapGetStreams;
+}
+
+function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  return Promise.race([
+    _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
+    new Promise(function(resolve) {
+      setTimeout(function() { resolve([]); }, 3500);
+    })
+  ]);
 }

@@ -492,7 +492,7 @@ function makeStream(url, title, referer, index) {
   };
 }
 
-function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+function _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum) {
   var isMovie = mediaType === "movie" || mediaType === "film";
 
   if (!isMovie && (!seasonNum || !episodeNum)) {
@@ -551,7 +551,16 @@ function getStreams(tmdbId, mediaType, seasonNum, episodeNum) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
+  module.exports = { getStreams: hardCapGetStreams };
 } else {
-  global.getStreams = getStreams;
+  global.getStreams = hardCapGetStreams;
+}
+
+function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  return Promise.race([
+    _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
+    new Promise(function(resolve) {
+      setTimeout(function() { resolve([]); }, 3500);
+    })
+  ]);
 }

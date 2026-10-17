@@ -236,7 +236,7 @@ function makeStream(url, title, quality, label) {
   };
 }
 
-function getStreams(tmdbId, mediaType) {
+function _getStreamsCore(tmdbId, mediaType) {
   if (mediaType === "tv" || mediaType === "series") {
     // FilmModu focuses strictly on movies
     return Promise.resolve([]);
@@ -272,7 +272,16 @@ function getStreams(tmdbId, mediaType) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { getStreams: getStreams };
+  module.exports = { getStreams: hardCapGetStreams };
 } else {
-  global.getStreams = getStreams;
+  global.getStreams = hardCapGetStreams;
+}
+
+function hardCapGetStreams(tmdbId, mediaType, seasonNum, episodeNum) {
+  return Promise.race([
+    _getStreamsCore(tmdbId, mediaType, seasonNum, episodeNum),
+    new Promise(function(resolve) {
+      setTimeout(function() { resolve([]); }, 3500);
+    })
+  ]);
 }
